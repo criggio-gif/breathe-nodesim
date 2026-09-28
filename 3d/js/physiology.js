@@ -123,7 +123,8 @@
 				infusion: 0,    // mL still to be infused
 				infusionRate: 0,// mL/s
 				hbDil: 1,
-				rvFunc: 1       // right ventricular function (RV-PA coupling), smoothed
+				rvFunc: 1,      // right ventricular function (RV-PA coupling), smoothed
+				pAO2: null      // alveolar PO2: the lung gas volume is an O2 store (null = start at steady state)
 			};
 			this.prev = { pplat: 20, pao2: 90, pvo2: 40, paco2: 40, ph: 7.4, mpap: 16, overdist: 0 };
 			this.settle(900);
@@ -468,10 +469,15 @@
 			const fio2 = clamp(v.FractionInspiredOxygen, 0.21, 1);
 			const paco2 = S.paco2;
 			const pio2 = fio2 * (P_ATM - P_H2O);
-			g.pAO2 = Math.max(0, pio2 - paco2 * (fio2 + (1 - fio2) / 0.8));
+			//Steady-state alveolar gas equation; the actual PAO2 is a state that moves toward it
+			//at the pace of ventilation and falls with O2 uptake when ventilation stops (see step)
+			g.pAO2ss = Math.max(0, pio2 - paco2 * (fio2 + (1 - fio2) / 0.8));
+			g.pio2 = pio2;
+			if (S.pAO2 === null) S.pAO2 = g.pAO2ss;
+			g.pAO2 = S.pAO2;
 
 			const nonAerMean = m.mode === 'SI' ? 1 - m.aerExp : 1 - 0.6 * m.aerExp - 0.4 * m.aerInsp;
-			g.shunt = clamp(0.02 + nonAerMean * 0.55 * Math.pow(h.co / d.co0, 0.35) + 0.35 * d.shuntSev
+			g.shunt = clamp(0.02 + nonAerMean * 0.7 * Math.pow(h.co / d.co0, 0.35) + 0.35 * d.shuntSev
 				+ 0.15 * m.overdist * nonAerMean, 0.02, 0.75);
 			g.lowVQ = clamp(0.03 + 0.25 * d.copdB + 0.2 * d.copdE + 0.15 * d.pneu + 0.1 * d.ards
 				+ 0.25 * A['Bronchoconstriction'], 0, 0.5);
@@ -519,6 +525,32 @@
 			return g;
 		}
 
+		/*
+		 * Alveolar O2 store. The gas in the lung (EELV + VT/2) holds O2; alveolar ventilation
+		 * brings it in, the blood takes it away at the rate of O2 uptake:
+		 *   dPAO2/dt = [VA·(PIO2 − PAO2) − K·VO2] / Vlung,   K = 863·(1 − 0.2·FiO2)
+		 * K makes the steady state identical to the alveolar gas equation (R = 0.8). Uptake
+		 * fades as PAO2 approaches the mixed venous PO2. In apnea PAO2 falls by K·VO2/Vlung per
+		 * minute: faster when the lung is small (ARDS, obesity).
+		 */
+		alveolarO2(g, m, dt) {
+			const S = this.S;
+			const vLung = Math.max(300, m.eelv + 0.5 * m.vt);                  // mL
+			const va = g.va * 1000 / 60;                                        // mL/s
+			const k = 863 * (1 - 0.2 * g.fio2);
+			const uptake = g.vo2eff / 60 * clamp((S.pAO2 - g.pvo2) / 15, 0, 1); // mL/s
+			const rate = va / vLung;
+			if (rate * dt > 1e-4) {
+				const target = g.pio2 - k * uptake / va;
+				S.pAO2 = target + (S.pAO2 - target) * Math.exp(-rate * dt);
+			} else {
+				S.pAO2 -= k * uptake / vLung * dt;
+			}
+			S.pAO2 = clamp(S.pAO2, 0, g.pio2);
+			g.vLung = vLung; g.o2uptake = uptake * 60; g.o2k = k;
+			g.dPAO2 = (va * (g.pio2 - g.pAO2) - k * uptake) / vLung * 60;       // mmHg/min
+		}
+
 		/* ------------------------------------------------------------- step */
 
 		step(dt) {
@@ -551,6 +583,7 @@
 
 			const h = this.hemodynamics(d, m);
 			const g = this.gasExchange(d, m, h, v);
+			this.alveolarO2(g, m, dt);
 
 			//Reflex control (baroreflex + chemoreflex + stress)
 			const e = (d.map0 - h.map) / d.map0;
@@ -631,7 +664,7 @@
 					pmusMean: m.pmusMean || 0, pplPlat: m.ppl0 + (m.vpeep + m.vt) / m.ccw,
 					nonAerMean: g.nonAerMean, lowVQ: g.lowVQ, cc: g.cc, clow: g.clow, plow: g.plow, pvo2: g.pvo2,
 					avd: g.vo2 / (10 * h.co), vo2Demand: g.vo2, vco2: g.vco2, vdAnat: g.vdAnat, vdAlv: g.vdAlvFrac, zone1: g.zone1,
-					pio2: g.fio2 * (P_ATM - P_H2O), elim, dPaco2PerMin: (g.vco2 - elim) / 25,
+					pio2: g.fio2 * (P_ATM - P_H2O), pAO2ss: g.pAO2ss, vLung: g.vLung, o2uptake: g.o2uptake, o2k: g.o2k, dPAO2: g.dPAO2, elim, dPaco2PerMin: (g.vco2 - elim) / 25,
 					rvr: h.rvr, kp: h.kp, comax: h.comax, hrFactor: h.hrFactor, contractF: h.contract, lvUnload: h.lvUnload,
 					ptm: h.rap - h.pplMean - h.ppc, slope: h.preloadSlope, swing: h.swing || 0,
 					pvrWU: h.pvr, pvr0: h.pvr0, pvrLow: h.pvrLow, pvrHigh: h.pvrHigh, pvrHpv: h.pvrHpv, pvrAcid: h.pvrAcid, pvrDisease: h.pvrDisease,
