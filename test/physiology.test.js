@@ -142,6 +142,25 @@ check('pericardial effusion lowers cardiac output', () => {
 	const b = new PhysiologyModel({ conditions: { 'Pericardial Effusion': { AccumulatedVolume: 700 } } }).out;
 	assert(b.co < a.co && b.map < a.map);
 });
+check('alveolar O2 store: steady state matches the alveolar gas equation', () => {
+	const o = new PhysiologyModel().out;
+	assert(Math.abs(o.pAO2 - o.x.pAO2ss) < 1, 'PAO2 ' + o.pAO2 + ' vs ' + o.x.pAO2ss);
+});
+
+check('alveolar O2 store: losing ventilation desaturates, faster with a small ARDS lung', () => {
+	const fall = conditions => {
+		const m = new PhysiologyModel(conditions ? { conditions } : undefined);
+		m.setVentilator({ FractionInspiredOxygen: 0.4, PositiveEndExpiratoryPressure: 8 });
+		const before = run(m, 600);
+		m.setAction('Ventilator Leak', 1);
+		const after = run(m, 120);
+		return { before, after, dPAO2: before.pAO2 - after.pAO2 };
+	};
+	const healthy = fall(null), ards = fall(ARDS);
+	assert(ards.after.spo2 < 90, 'ARDS SpO2 after 2 min of leak ' + ards.after.spo2);
+	assert(ards.after.spo2 < ards.before.spo2 - 5, 'ARDS SpO2 ' + ards.before.spo2 + ' -> ' + ards.after.spo2);
+	assert(ards.dPAO2 > healthy.dPAO2, 'PAO2 fall ARDS ' + ards.dPAO2 + ' vs healthy ' + healthy.dPAO2);
+});
 
 let failed = 0;
 for (const c of checks) {

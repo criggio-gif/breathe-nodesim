@@ -49,8 +49,10 @@
 			E(V('Ttot', o.x.ttot, 2), [F([K(60)], [V('FR', o.rr, 1, 'rr')])])
 		],
 		fio2: o => [
-			E(V('PAO₂', o.pAO2, 0), [V('FiO₂', o.fio2, 2, 'fio2'), '·', K(713), '−', V('PaCO₂', o.paco2, 0, 'paco2'), '·', '(', V('FiO₂', o.fio2, 2, 'fio2'), '+', F([K(1), '−', V('FiO₂', o.fio2, 2, 'fio2')], [K(0.8)]), ')'],
-				'Equazione dei gas alveolari (760 − 47 = 713 mmHg, quoziente respiratorio 0,8).')
+			E(V('PAO₂ regime', o.x.pAO2ss, 0), [V('FiO₂', o.fio2, 2, 'fio2'), '·', K(713), '−', V('PaCO₂', o.paco2, 0, 'paco2'), '·', '(', V('FiO₂', o.fio2, 2, 'fio2'), '+', F([K(1), '−', V('FiO₂', o.fio2, 2, 'fio2')], [K(0.8)]), ')'],
+				'Equazione dei gas alveolari (760 − 47 = 713 mmHg, quoziente respiratorio 0,8): il valore verso cui tende la PAO₂.'),
+			E(V('dPAO₂/dt', o.x.dPAO2, 1), [F([V('VA', o.va, 2, 'va'), '·', K(1000), '·', '(', V('PIO₂', o.x.pio2, 0), '−', V('PAO₂', o.pAO2, 0), ')', '−', V('K', o.x.o2k, 0), '·', V('VO₂ capt', o.x.o2uptake, 0)], [V('Vpolm', o.x.vLung, 0, 'eelv')])],
+				'Riserva di O₂ nel polmone (mmHg/min). Vpolm = EELV + VT/2; K = 863·(1 − 0,2·FiO₂). In apnea la PAO₂ scende di K·VO₂/Vpolm al minuto: più in fretta se il polmone è piccolo.')
 		],
 		raw: o => [
 			E(V('Raw', o.raw, 1, 'raw'), [K(9), '·', '(', K(1), '+', K(2.5), '·', V('bronchite', o.x.copdB, 2), '+', K(0.8), '·', V('enfisema', o.x.copdE, 2), '+', K(3), '·', V('broncocostr', o.x.bronch, 2), ')', '+', K(30), '·', V('ostruzione', o.x.obstr, 2)])
@@ -131,7 +133,7 @@
 
 		/* ------------------------------------------------------- gas exchange */
 		shunt: o => [
-			E(V('Qs/Qt', o.shunt / 100, 3, 'shunt'), [K(0.02), '+', V('non aerato', o.x.nonAerMean, 2, 'recruit'), '·', K(0.55), '·', P(['(', F([V('GC', o.co, 2, 'co')], [V('GC₀', o.x.co0, 2)]), ')'], [K(0.35)]),
+			E(V('Qs/Qt', o.shunt / 100, 3, 'shunt'), [K(0.02), '+', V('non aerato', o.x.nonAerMean, 2, 'recruit'), '·', K(0.7), '·', P(['(', F([V('GC', o.co, 2, 'co')], [V('GC₀', o.x.co0, 2)]), ')'], [K(0.35)]),
 				'+', K(0.35), '·', V('shunt pat', o.x.shuntSev, 2), '+', K(0.15), '·', V('sovradist', o.overdist / 100, 2, 'overdist'), '·', V('non aerato', o.x.nonAerMean, 2, 'recruit')])
 		],
 		vdvt: o => [
