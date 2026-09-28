@@ -6,8 +6,8 @@
 <title>BREATHE NodeSim</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="css/style.css?v=3">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400&display=swap">
+<link rel="stylesheet" href="css/style.css?v=4">
 </head>
 <body>
 <div class="app">
@@ -157,7 +157,7 @@
 				<h2>Come si legge</h2>
 				<p>Ogni riquadro è un concetto di fisiologia; le frecce indicano chi influenza chi. <strong>+</strong> significa che le due grandezze si muovono nello stesso verso, <strong>&minus;</strong> in verso opposto.</p>
 				<p>Quando modifichi la PEEP o esegui una manovra, le frecce che partono da un nodo che sta cambiando si animano: puoi seguire l'effetto a cascata dalla meccanica al cuore. Le frecce &#9650;&#9660; nei nodi mostrano la variazione rispetto a prima dell'ultimo intervento.</p>
-				<p>Seleziona un nodo per vedere cosa rappresenta, come viene calcolato e da cosa dipende. I nodi si possono trascinare.</p>
+				<p>Seleziona un nodo per vedere cosa rappresenta, come viene calcolato e da cosa dipende; con <strong>Equazioni dal vivo</strong> (o un doppio clic sul nodo) vedi le sue equazioni con i valori del paziente in tempo reale. I nodi si possono trascinare.</p>
 			</div>
 			<div id="node-detail" hidden></div>
 		</section>
@@ -168,11 +168,12 @@
 	</aside>
 </div>
 
-<script src="js/physiology.js?v=3"></script>
-<script src="js/nodes.js?v=3"></script>
-<script src="js/graph.js?v=3"></script>
-<script src="js/monitor.js?v=3"></script>
-<script src="js/app.js?v=3"></script>
-<script src="js/assistant.js?v=3"></script>
+<script src="js/physiology.js?v=4"></script>
+<script src="js/nodes.js?v=4"></script>
+<script src="js/graph.js?v=4"></script>
+<script src="js/monitor.js?v=4"></script>
+<script src="js/equations.js?v=4"></script>
+<script src="js/app.js?v=4"></script>
+<script src="js/assistant.js?v=4"></script>
 </body>
 </html>

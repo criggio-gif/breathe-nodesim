@@ -187,7 +187,7 @@
 				ev.stopPropagation();
 				const pt = this.toGraph(ev);
 				drag = { dx: pt.x - this.pos[n.id].x, dy: pt.y - this.pos[n.id].y, moved: false, sx: ev.clientX, sy: ev.clientY };
-				g.setPointerCapture(ev.pointerId);
+				try { g.setPointerCapture(ev.pointerId); } catch (e) { /* synthetic or finished pointer */ }
 			});
 			g.addEventListener('pointermove', ev => {
 				if (!drag) return;
@@ -281,7 +281,7 @@
 			let pan = null;
 			svg.addEventListener('pointerdown', ev => {
 				pan = { x: ev.clientX, y: ev.clientY, vb: this.vb.slice(), moved: false };
-				svg.setPointerCapture(ev.pointerId);
+				try { svg.setPointerCapture(ev.pointerId); } catch (e) { /* synthetic or finished pointer */ }
 			});
 			svg.addEventListener('pointermove', ev => {
 				if (!pan) return;

@@ -120,7 +120,7 @@
 
 	/* ------------------------------------------------------------ state */
 
-	let model, out, reference, graph, monitor, trends;
+	let model, out, reference, graph, monitor, trends, eqView;
 	let running = true, speed = 1;
 	let history = [];
 	let events = [];
@@ -597,6 +597,7 @@
 		box.innerHTML =
 			'<div class="nd-cat"><i></i><span></span><button class="btn btn-small nd-close" aria-label="Chiudi">×</button></div>' +
 			'<h2 class="nd-title"></h2>' +
+			'<button type="button" class="btn btn-small nd-live"><span class="nd-live-fx" aria-hidden="true">ƒ(x)</span> Equazioni dal vivo</button>' +
 			'<div class="nd-value"><output class="nd-big"></output><span class="nd-unit"></span><span class="pill"></span></div>' +
 			'<p class="nd-sub"></p>' +
 			'<canvas class="nd-spark" aria-label="Andamento negli ultimi 10 minuti"></canvas>' +
@@ -607,6 +608,10 @@
 		box.querySelector('.nd-cat i').style.background = cat.color;
 		box.querySelector('.nd-cat span').textContent = cat.label;
 		box.querySelector('.nd-close').addEventListener('click', () => graph.select(null));
+		const live = box.querySelector('.nd-live');
+		live.hidden = !eqView.has(id);
+		live.addEventListener('click', () => eqView.open(id, out));
+		if (!eqView.el.hidden) eqView.open(id, out);
 		box.querySelector('.nd-title').textContent = n.labelFn ? n.labelFn(out) : n.label;
 		box.querySelector('.nd-desc').textContent = n.desc;
 		box.querySelector('.formula').textContent = n.formula;
@@ -688,6 +693,7 @@
 		});
 		trends.draw(out);
 		updateInspector();
+		eqView.update(out);
 		if (maneuver) {
 			const st = maneuver.steps[maneuver.i];
 			$('ms-step').textContent = st ? st.label + ' · ' + Math.max(0, st.dur - maneuver.tStep).toFixed(0) + ' s' : '';
@@ -979,7 +985,16 @@
 	};
 
 	function init() {
+		eqView = new window.BreatheEquations.EquationView();
+		eqView.onNavigate = id => graph.select(id);
 		graph = new window.NodeGraph($('graph'), C, showNode);
+		//Double click on a node: straight to its live equations
+		$('graph').addEventListener('dblclick', ev => {
+			const g = ev.target.closest('.node');
+			if (!g) return;
+			graph.select(g.dataset.id);
+			eqView.open(g.dataset.id, out);
+		});
 		monitor = new Monitor($('monitor'));
 		trends = new Trends($('trends'), TREND_SERIES);
 		buildNumerics();

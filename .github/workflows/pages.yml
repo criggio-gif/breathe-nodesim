@@ -25,6 +25,7 @@ jobs:
         with:
           node-version: 20
       - run: node test/physiology.test.js
+      - run: node test/equations.test.js
 
   deploy:
     needs: test
