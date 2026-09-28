@@ -111,6 +111,20 @@ check('PEEP increases cardiac output in severe LV systolic dysfunction less than
 	assert(lvd > normal, 'LVD ' + lvd + ' normal ' + normal);
 });
 
+check('West zones: high PEEP raises mean PAP, more in hypovolemia (alveolar pressure becomes the downstream pressure)', () => {
+	const rise = patient => {
+		const m = new PhysiologyModel({ patient });
+		const before = m.out.mpap;
+		m.setVentilator({ PositiveEndExpiratoryPressure: 20 });
+		const o = run(m, 300);
+		return { d: o.mpap - before, zone: o.x.zone12, waterfall: o.x.waterfall };
+	};
+	const normo = rise({ Volemia: 1 }), hypo = rise({ Volemia: 0.8 });
+	assert(normo.d > 0, 'mPAP rise ' + normo.d);
+	assert(hypo.d > normo.d, 'hypovolemic rise ' + hypo.d + ' <= ' + normo.d);
+	assert(hypo.zone > normo.zone && hypo.waterfall > 0, 'zone 1-2 fraction');
+});
+
 check('pericardial effusion lowers cardiac output', () => {
 	const a = new PhysiologyModel().out;
 	const b = new PhysiologyModel({ conditions: { 'Pericardial Effusion': { AccumulatedVolume: 700 } } }).out;

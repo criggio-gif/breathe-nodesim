@@ -24,7 +24,8 @@ const scen = {
 	healthy: {}, ards: { conditions: { ARDS: { LeftLungSeverity: .6, RightLungSeverity: .6 } }, ventilator: { PositiveEndExpiratoryPressure: 14 } },
 	copd: { conditions: { COPD: { BronchitisSeverity: .7, LeftLungEmphysemaSeverity: .6, RightLungEmphysemaSeverity: .6 } }, ventilator: { RespirationRate: 24 } },
 	pc: { ventilator: { mode: 'PC', InspiratoryPressure: 25 } }, cpap: { ventilator: { mode: 'CPAP' }, patient: { Sedation: 0.3 } },
-	lvd_hypo: { patient: { Volemia: 0.85 }, conditions: { 'Chronic Ventricular Systolic Disfunction': { Severity: .8 } } }
+	lvd_hypo: { patient: { Volemia: 0.85 }, conditions: { 'Chronic Ventricular Systolic Disfunction': { Severity: .8 } } },
+	peep20_hypo: { patient: { Volemia: 0.8 }, ventilator: { PositiveEndExpiratoryPressure: 22, InspiratoryPeriod: 1.4 } }
 };
 const skip = /^(S⁻¹|S$|∫|pressione|nessun|→|∝|PAS|  |    )/;
 let bad = 0, checked = 0;

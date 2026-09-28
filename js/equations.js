@@ -178,9 +178,22 @@
 				'Unità Wood (× 80 = dyn·s·cm⁻⁵). Ogni fattore vale 1 in condizioni normali.'),
 			E(V('collasso', o.x.pvrLow, 2), [K(1), '+', K(1.2), '·', 'max', '(', K(0), ',', K(1), '−', V('aerazione', o.x.aerExp, 2, 'recruit'), '−', K(0.05), ')'])
 		],
-		mpap: o => [
-			E(V('mPAP', o.mpap, 0, 'mpap'), [V('PAWP', o.pawp, 1), '+', V('GC', o.co, 2, 'co'), '·', V('PVR', o.x.pvrWU, 2, 'pvr')])
-		],
+		mpap: o => {
+			const H = o.x.hydroSpan, D = o.x.palv - o.pawp;
+			const excess = D <= -H / 2
+				? E(V('eccesso', o.x.waterfall, 1), [K(0)], 'Zona 3 in tutto il polmone: la pressione alveolare è sotto quella venosa ovunque, a valle conta la PAWP.')
+				: D >= H / 2
+					? E(V('eccesso', o.x.waterfall, 1), [V('P alv', o.x.palv, 1, 'mpaw'), '−', V('PAWP', o.pawp, 1)], 'Tutto il polmone in zona 1-2: a valle conta la pressione alveolare.')
+					: E(V('eccesso', o.x.waterfall, 1), [F([P(['(', V('P alv', o.x.palv, 1, 'mpaw'), '−', V('PAWP', o.pawp, 1), '+', F([V('H', H, 0)], [K(2)]), ')'], [K(2)])], [K(2), '·', V('H', H, 0)])],
+						'Media lungo l\'altezza del polmone (H = gradiente idrostatico, atrio sinistro a metà altezza) della quota di pressione alveolare che supera quella venosa locale.');
+			return [
+				E(V('mPAP', o.mpap, 0, 'mpap'), [V('P valle', o.x.pOut, 1), '+', V('GC', o.co, 2, 'co'), '·', V('PVR', o.x.pvrWU, 2, 'pvr')]),
+				E(V('P valle', o.x.pOut, 1), [V('PAWP', o.pawp, 1), '+', V('eccesso', o.x.waterfall, 1)], 'Pressione a valle del circolo polmonare (cascata vascolare delle zone di West).'),
+				excess,
+				E(V('zona 1-2', o.x.zone12, 2), ['clamp', '(', F([V('P alv', o.x.palv, 1, 'mpaw'), '−', V('PAWP', o.pawp, 1), '+', F([V('H', H, 0)], [K(2)])], [V('H', H, 0)]), ')'], 'Frazione di polmone in cui la pressione alveolare supera quella venosa. P alv = pressione media delle vie aeree in mmHg.'),
+				E(V('PAWP', o.pawp, 1), [V('Ppl', o.pplMeanMmHg, 1, 'ppl'), '+', V('P transm. AS', o.x.lapTm, 1)], 'La pressione pleurica si somma alla pressione transmurale dell\'atrio sinistro.')
+			];
+		},
 		rvfunc: o => [
 			E(V('f VD', o.rvFunc / 100, 2, 'rvfunc'), [F([K(1)], [K(1), '+', P(['(', F(['max', '(', K(0), ',', V('mPAP', o.x.prevMpap, 1, 'mpap'), '−', K(22), ')'], [K(18)]), ')'], [K(2)])])])
 		],
