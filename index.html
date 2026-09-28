@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BREATHE NodeSim</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+
+	<header class="topbar">
+		<div class="brand">
+			<span class="brand-mark" aria-hidden="true"></span>
+			<div>
+				<h1>BREATHE <span>NodeSim</span></h1>
+				<p class="brand-sub">Fisiologia del paziente in ventilazione meccanica, a nodi</p>
+			</div>
+		</div>
+		<div class="clock" role="group" aria-label="Controllo del tempo simulato">
+			<button id="btn-play" class="btn btn-icon" aria-label="Pausa" title="Pausa / riprendi">&#10074;&#10074;</button>
+			<div class="clock-time"><span class="clock-label">tempo simulato</span><output id="sim-time">00:00</output></div>
+			<div class="seg" id="speed" role="radiogroup" aria-label="Velocità">
+				<button data-speed="1" class="on" role="radio" aria-checked="true">1&times;</button>
+				<button data-speed="5" role="radio" aria-checked="false">5&times;</button>
+				<button data-speed="20" role="radio" aria-checked="false">20&times;</button>
+				<button data-speed="60" role="radio" aria-checked="false">60&times;</button>
+			</div>
+			<button id="btn-reset" class="btn" title="Ricrea il paziente allo stato stazionario">Riavvia</button>
+		</div>
+	</header>
+
+	<aside class="controls" aria-label="Impostazioni">
+		<section class="panel">
+			<label class="field-label" for="preset">Scenario</label>
+			<select id="preset"></select>
+			<p class="hint" id="preset-desc"></p>
+		</section>
+
+		<details class="panel" open>
+			<summary>Ventilatore</summary>
+			<div class="seg seg-wide" id="vent-mode" role="radiogroup" aria-label="Modalità">
+				<button data-mode="VC" role="radio">VC</button>
+				<button data-mode="PC" role="radio">PC</button>
+				<button data-mode="CPAP" role="radio">CPAP/PS</button>
+			</div>
+			<div id="vent-fields" class="fields"></div>
+			<div class="quick">
+				<span class="field-label">PEEP rapida</span>
+				<div class="chips" id="peep-chips"></div>
+			</div>
+		</details>
+
+		<details class="panel" open>
+			<summary>Manovre</summary>
+			<div class="maneuvers">
+				<div class="maneuver">
+					<button class="btn btn-primary" id="m-si">Reclutamento: insufflazione sostenuta</button>
+					<div class="inline-fields">
+						<label for="si-p">P <input id="si-p" type="number" min="20" max="50" step="1" value="40"> cmH&#8322;O</label>
+						<label for="si-t">per <input id="si-t" type="number" min="10" max="60" step="5" value="40"> s</label>
+					</div>
+				</div>
+				<button class="btn" id="m-staircase">Reclutamento a scalini + titolazione PEEP decrementale</button>
+				<div class="btn-row">
+					<button class="btn" id="m-fluid">Bolo di fluidi 500 mL</button>
+					<button class="btn" id="m-bleed">Emorragia 500 mL</button>
+				</div>
+			</div>
+			<div id="maneuver-status" class="maneuver-status" hidden>
+				<div class="ms-text"><strong id="ms-name"></strong><span id="ms-step"></span></div>
+				<div class="progress"><span id="ms-bar"></span></div>
+				<button class="btn btn-small" id="ms-stop">Interrompi</button>
+			</div>
+		</details>
+
+		<details class="panel">
+			<summary>Paziente</summary>
+			<div id="patient-fields" class="fields"></div>
+			<label class="btn btn-file" for="import-file">Importa paziente o stato BREATHE (.json)</label>
+			<input id="import-file" type="file" accept=".json,application/json" hidden>
+			<p class="hint" id="import-msg">Legge i file di <code>breathe.engine/resources/patients</code> e <code>breathe.engine/states</code>.</p>
+		</details>
+
+		<details class="panel">
+			<summary>Condizioni</summary>
+			<div id="condition-fields" class="fields"></div>
+		</details>
+
+		<details class="panel">
+			<summary>Azioni</summary>
+			<div id="action-fields" class="fields"></div>
+		</details>
+	</aside>
+
+	<main class="stage">
+		<section class="graph-wrap" aria-label="Grafo dei nodi fisiologici">
+			<div class="graph-toolbar">
+				<div class="legend">
+					<span><i class="lg lg-pos"></i>relazione diretta (+)</span>
+					<span><i class="lg lg-neg"></i>relazione inversa (&minus;)</span>
+					<span><i class="lg lg-act"></i>segnale che si propaga</span>
+				</div>
+				<div class="graph-actions">
+					<button class="btn btn-small" id="btn-ref" title="Usa lo stato attuale come riferimento per le variazioni &#9650;&#9660;">Fissa riferimento</button>
+					<button class="btn btn-small btn-icon" id="z-in" aria-label="Ingrandisci">+</button>
+					<button class="btn btn-small btn-icon" id="z-out" aria-label="Riduci">&minus;</button>
+					<button class="btn btn-small" id="z-fit">Adatta</button>
+					<button class="btn btn-small" id="z-reset" title="Riporta i nodi nella posizione iniziale">Disposizione</button>
+				</div>
+			</div>
+			<svg id="graph" role="img" aria-label="Nodi fisiologici collegati da relazioni causali"></svg>
+		</section>
+
+		<section class="bedside">
+			<div class="monitor-wrap">
+				<div class="monitor-screen"><canvas id="monitor" aria-label="Curve di pressione, flusso e pressione arteriosa"></canvas></div>
+				<div class="numerics" id="numerics"></div>
+			</div>
+			<div class="trends-wrap">
+				<div class="trends-head">
+					<h2>Trend</h2>
+					<div class="seg seg-small" id="trend-span" role="radiogroup" aria-label="Finestra temporale">
+						<button data-span="300" role="radio">5 min</button>
+						<button data-span="900" class="on" role="radio">15 min</button>
+						<button data-span="3600" role="radio">60 min</button>
+					</div>
+				</div>
+				<div class="trends" id="trends"></div>
+			</div>
+		</section>
+	</main>
+
+	<aside class="inspector" aria-label="Dettagli">
+		<section class="panel" id="node-panel">
+			<div id="node-empty">
+				<h2>Come si legge</h2>
+				<p>Ogni riquadro è un concetto di fisiologia; le frecce indicano chi influenza chi. <strong>+</strong> significa che le due grandezze si muovono nello stesso verso, <strong>&minus;</strong> in verso opposto.</p>
+				<p>Quando modifichi la PEEP o esegui una manovra, le frecce che partono da un nodo che sta cambiando si animano: puoi seguire l'effetto a cascata dalla meccanica al cuore. Le frecce &#9650;&#9660; nei nodi mostrano la variazione rispetto a prima dell'ultimo intervento.</p>
+				<p>Seleziona un nodo per vedere cosa rappresenta, come viene calcolato e da cosa dipende. I nodi si possono trascinare.</p>
+			</div>
+			<div id="node-detail" hidden></div>
+		</section>
+		<section class="panel">
+			<h2>Cosa è successo</h2>
+			<div id="events" class="events"></div>
+		</section>
+	</aside>
+</div>
+
+<script src="js/physiology.js"></script>
+<script src="js/nodes.js"></script>
+<script src="js/graph.js"></script>
+<script src="js/monitor.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

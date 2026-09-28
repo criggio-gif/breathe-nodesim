@@ -1,0 +1,72 @@
+# BREATHE NodeSim
+
+Simulatore didattico a nodi delle modificazioni fisiologiche in un paziente intubato e ventilato meccanicamente.
+
+Ogni **nodo** è un concetto di fisiologia (PEEP totale, aerazione polmonare, compliance, pressione pleurica, pressione media di riempimento sistemico, ritorno venoso, resistenze polmonari, gittata cardiaca, PA, shunt, spazio morto, PaO₂, PaCO₂, DO₂, lattato…). Le **frecce** indicano le relazioni causali con il loro segno (+ stesso verso, − verso opposto, ± relazione a U). Quando cambi un parametro, le frecce che partono dai nodi in variazione si animano e si può seguire l'effetto a cascata, per esempio:
+
+```
+PEEP ↑ → PEEP totale ↑ → pressione media vie aeree ↑ → pressione pleurica ↑ → PVC ↑ → gradiente di ritorno venoso ↓ → gittata cardiaca ↓ → PA ↓ → tono simpatico ↑ → FC ↑, RVS ↑
+       → aerazione ↑ (se il polmone è reclutabile) → compliance ↑, shunt ↓ → PaO₂ ↑
+       → sovradistensione ↑ (se non lo è) → spazio morto ↑, resistenze polmonari ↑ → funzione VD ↓
+```
+
+## Avvio
+
+**Online:** https://criggio-gif.github.io/breathe-nodesim/
+
+In locale non richiede build né server: aprire `index.html` nel browser.
+(In alternativa `python3 -m http.server` nella cartella e poi `http://localhost:8000`.)
+
+Il simulatore è nato come modulo di [BREATHE](https://github.com/GionathaPirola/BREATHE), simulatore respiratorio basato sul Pulse Physiology Engine, e ne usa gli stessi nomi di parametri per paziente, ventilatore, condizioni e azioni.
+
+### Pubblicazione (GitHub Pages)
+
+Il workflow `.github/workflows/pages.yml` esegue i test e pubblica il sito a ogni push su `main` (o manualmente da *Actions > NodeSim on GitHub Pages > Run workflow*). Configurazione iniziale, una sola volta: *Settings > Pages > Build and deployment > Source*: **GitHub Actions**.
+
+Test del modello fisiologico (Node.js ≥ 14):
+
+```bash
+node test/physiology.test.js
+```
+
+## Cosa si può fare
+
+- **Scenari**: ARDS moderata, polmone sano, ARDS grave con ipovolemia, BPCO riacutizzata, scompenso sistolico, obesità grave, versamento pericardico.
+- **Ventilatore**: modalità VC, PC e CPAP/PS con gli stessi parametri di `breathe.engine` (`TidalVolume`, `InspiratoryPressure`, `DeltaPressureSupport`, `PositiveEndExpiratoryPressure`, `RespirationRate`, `FractionInspiredOxygen`, `InspiratoryPeriod`, `Flow`, `Slope`, `AssistedMode` AC/CMV).
+- **Manovre**:
+  - reclutamento con insufflazione sostenuta (CPAP 40 cmH₂O × 40 s, configurabile);
+  - reclutamento a scalini in PC seguito da titolazione decrementale della PEEP (24 → 6 cmH₂O) con tabella della compliance e scelta automatica di PEEP ottimale + 2;
+  - bolo di fluidi, emorragia.
+- **Paziente, condizioni e azioni** con i nomi di `data.Patient`, `data.Condition` (ARDS, Pneumonia, COPD, Pulmonary Fibrosis, Pulmonary Shunt, Pericardial Effusion, Chronic Anemia, Chronic Ventricular Systolic Disfunction) e `data.Action` (Bronchoconstriction, Airway Obstruction, Acute Stress, Ventilator Leak). In più: volemia e sedazione.
+- **Importazione** di un paziente da `breathe.engine/resources/patients/*.json` o da uno stato `breathe.engine/states/*.json` (sezione `InitialPatient`, come in `Patient.loadPatientData`).
+- **Monitor** con curve di pressione, flusso e pressione arteriosa (con variazione respiratoria), parametri numerici e trend con i marcatori degli interventi.
+- **Cosa è successo**: dopo ogni intervento il pannello elenca le variabili cambiate, prima → dopo, e per ciascuna le cause a monte coerenti con il grafo.
+- Tempo simulato 1×, 5×, 20×, 60×.
+
+## Modello
+
+Il modello (`js/physiology.js`) è a parametri concentrati e volutamente esplicativo; non sostituisce il Pulse Physiology Engine usato da `breathe.engine`, che resta il riferimento per la simulazione quantitativa. I blocchi principali:
+
+| Blocco | Modello |
+| --- | --- |
+| Reclutamento | Pressioni di apertura e chiusura distribuite normalmente, con isteresi: le unità si aprono se Pplat > Popen e restano aperte se PEEPtot > Pclose (< Popen). Apertura in secondi, collasso in ~40 s. |
+| Meccanica | Curva P-V esponenziale (Salazar-Knowles) del polmone aerato + parete toracica lineare; VC, PC e PS a un compartimento RC; auto-PEEP da tempo espiratorio/costante di tempo; pressione media e potenza meccanica integrate sulla curva di pressione. |
+| Pleura | Ppl = Ppl₀ + V/Ccw − Pmus: la frazione di pressione trasmessa dipende dal rapporto tra elastanza della parete e del polmone. |
+| Circolo | Modello di Guyton: ritorno venoso (Pmsf − PVC)/RVR intersecato con una curva di Starling in funzione della pressione transmurale (PVC − Ppl − Ppericardica). PVR a U con il volume polmonare, vasocostrizione ipossica, acidosi; funzione VD dipendente dalla PAPm; scarico del VS nella disfunzione sistolica. Riflesso barocettivo e chemocettivo su FC, contrattilità, RVS e venocostrizione. |
+| Scambi | Shunt da polmone non aerato (con effetto della portata), compartimento a basso V/Q, contenuti di O₂ con curva di Severinghaus, SvO₂ dal bilancio VO₂/DO₂; spazio morto anatomico + alveolare; PaCO₂ dinamica con depositi di CO₂; pH con Henderson-Hasselbalch e lattato. |
+
+Il catalogo dei nodi (`js/nodes.js`) riporta per ciascun nodo descrizione, formula, range di normalità e relazioni.
+
+## Struttura
+
+```
+breathe-nodesim/
+├── index.html
+├── css/style.css
+├── js/physiology.js   modello fisiologico (usabile anche da Node.js)
+├── js/nodes.js        catalogo dei nodi e delle relazioni
+├── js/graph.js        grafo SVG (pan, zoom, trascinamento, propagazione)
+├── js/monitor.js      monitor a curve e trend
+├── js/app.js          controlli, manovre, narrazione, loop di simulazione
+└── test/physiology.test.js
+```

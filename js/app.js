@@ -1,0 +1,806 @@
+/*
+ * BREATHE NodeSim - application: controls, maneuvers, narrative, simulation loop
+ */
+(function () {
+	'use strict';
+
+	const { PhysiologyModel, DEFAULT_PATIENT, DEFAULT_VENTILATOR } = window.BreathePhysiology;
+	const C = window.BreatheNodes;
+	const { Monitor, Trends, sparkline, cssVar } = window.BreatheMonitor;
+	const $ = id => document.getElementById(id);
+	const clone = o => JSON.parse(JSON.stringify(o));
+
+	/* ------------------------------------------------------------ catalogs */
+
+	//Conditions with the same names and parameters as breathe.engine data.Condition
+	const CONDITIONS = [
+		{ name: 'ARDS', label: 'ARDS', params: [{ label: 'Gravità (polmone sx = dx)', keys: ['LeftLungSeverity', 'RightLungSeverity'], min: 0, max: 1, step: 0.05, def: 0.6 }] },
+		{ name: 'Pneumonia', label: 'Polmonite', params: [{ label: 'Gravità (polmone sx = dx)', keys: ['LeftLungSeverity', 'RightLungSeverity'], min: 0, max: 1, step: 0.05, def: 0.4 }] },
+		{ name: 'COPD', label: 'BPCO', params: [
+			{ label: 'Bronchite', keys: ['BronchitisSeverity'], min: 0, max: 1, step: 0.05, def: 0.6 },
+			{ label: 'Enfisema (sx = dx)', keys: ['LeftLungEmphysemaSeverity', 'RightLungEmphysemaSeverity'], min: 0, max: 1, step: 0.05, def: 0.5 }] },
+		{ name: 'Pulmonary Fibrosis', label: 'Fibrosi polmonare', params: [{ label: 'Gravità', keys: ['Severity'], min: 0, max: 1, step: 0.05, def: 0.5 }] },
+		{ name: 'Pulmonary Shunt', label: 'Shunt polmonare', params: [{ label: 'Gravità', keys: ['Severity'], min: 0, max: 1, step: 0.05, def: 0.3 }] },
+		{ name: 'Pericardial Effusion', label: 'Versamento pericardico', params: [{ label: 'Volume', unit: 'mL', keys: ['AccumulatedVolume'], min: 0, max: 1000, step: 25, def: 500 }] },
+		{ name: 'Chronic Anemia', label: 'Anemia cronica', params: [{ label: 'Fattore di riduzione', keys: ['ReductionFactor'], min: 0, max: 0.4, step: 0.02, def: 0.2 }] },
+		{ name: 'Chronic Ventricular Systolic Disfunction', label: 'Disfunzione sistolica VS', params: [{ label: 'Gravità', keys: ['Severity'], min: 0, max: 1, step: 0.05, def: 0.6 }] }
+	];
+
+	//Actions with the same names as breathe.engine data.Action
+	const ACTIONS = [
+		{ name: 'Bronchoconstriction', label: 'Broncocostrizione' },
+		{ name: 'Airway Obstruction', label: 'Ostruzione delle vie aeree' },
+		{ name: 'Acute Stress', label: 'Stress acuto' },
+		{ name: 'Ventilator Leak', label: 'Perdita del circuito' }
+	];
+
+	//Ventilator fields per mode, as in breathe.web ventilators/*VentilatorPanel
+	const VENT_FIELDS = {
+		TidalVolume: { label: 'Volume corrente (VT)', unit: 'mL', min: 200, max: 1000, step: 10, dec: 0 },
+		InspiratoryPressure: { label: 'Pressione inspiratoria (Pinsp)', unit: 'cmH₂O', min: 5, max: 50, step: 1, dec: 0 },
+		DeltaPressureSupport: { label: 'Pressione di supporto (ΔPS)', unit: 'cmH₂O', min: 0, max: 25, step: 1, dec: 0 },
+		PositiveEndExpiratoryPressure: { label: 'PEEP', unit: 'cmH₂O', min: 0, max: 24, step: 1, dec: 0 },
+		RespirationRate: { label: 'Frequenza respiratoria (FR)', unit: 'atti/min', min: 4, max: 40, step: 1, dec: 0 },
+		FractionInspiredOxygen: { label: 'FiO₂', unit: '', min: 0.21, max: 1, step: 0.01, dec: 2 },
+		InspiratoryPeriod: { label: 'Tempo inspiratorio (Ti)', unit: 's', min: 0.4, max: 3, step: 0.1, dec: 1 },
+		Flow: { label: 'Flusso inspiratorio', unit: 'L/min', min: 20, max: 120, step: 1, dec: 0 },
+		Slope: { label: 'Slope (rampa)', unit: 's', min: 0, max: 1, step: 0.05, dec: 2 }
+	};
+	const MODE_FIELDS = {
+		VC: ['TidalVolume', 'RespirationRate', 'PositiveEndExpiratoryPressure', 'FractionInspiredOxygen', 'InspiratoryPeriod', 'Flow'],
+		PC: ['InspiratoryPressure', 'RespirationRate', 'PositiveEndExpiratoryPressure', 'FractionInspiredOxygen', 'InspiratoryPeriod', 'Slope'],
+		CPAP: ['DeltaPressureSupport', 'PositiveEndExpiratoryPressure', 'FractionInspiredOxygen', 'Slope']
+	};
+
+	//Patient fields, as in breathe.web panels/PatientPanel
+	const PATIENT_FIELDS = {
+		Age: { label: 'Età', unit: 'anni', min: 18, max: 90, step: 1, dec: 0 },
+		Weight: { label: 'Peso', unit: 'kg', min: 40, max: 180, step: 1, dec: 0 },
+		Height: { label: 'Altezza', unit: 'cm', min: 145, max: 205, step: 1, dec: 0 },
+		HeartRateBaseline: { label: 'FC basale', unit: 'bpm', min: 50, max: 110, step: 1, dec: 0 },
+		SystolicArterialPressureBaseline: { label: 'PA sistolica basale', unit: 'mmHg', min: 90, max: 140, step: 1, dec: 0 },
+		DiastolicArterialPressureBaseline: { label: 'PA diastolica basale', unit: 'mmHg', min: 55, max: 90, step: 1, dec: 0 },
+		RespirationRateBaseline: { label: 'FR spontanea basale', unit: 'atti/min', min: 8, max: 25, step: 1, dec: 0 },
+		BasalMetabolicRate: { label: 'Metabolismo basale', unit: 'kcal/die', min: 1000, max: 3000, step: 50, dec: 0 },
+		Volemia: { label: 'Volemia', unit: '× norma', min: 0.6, max: 1.4, step: 0.05, dec: 2 },
+		Sedation: { label: 'Sedazione (1 = nessuno sforzo spontaneo)', unit: '', min: 0, max: 1, step: 0.05, dec: 2 }
+	};
+
+	const PRESETS = [
+		{ id: 'ards', label: 'ARDS moderata', desc: 'Polmone con ampia quota reclutabile, PEEP bassa. Prova ad alzare la PEEP o a fare un reclutamento, poi a riabbassarla.',
+			conditions: { 'ARDS': { LeftLungSeverity: 0.6, RightLungSeverity: 0.6 } },
+			ventilator: { mode: 'VC', TidalVolume: 450, RespirationRate: 20, PositiveEndExpiratoryPressure: 5, FractionInspiredOxygen: 0.6, InspiratoryPeriod: 0.9, Flow: 50 } },
+		{ id: 'healthy', label: 'Polmone sano in anestesia', desc: 'Paziente standard di BREATHE, polmoni normali. La PEEP ha pochi benefici e solo costi emodinamici.',
+			conditions: {}, ventilator: { mode: 'VC', TidalVolume: 500, RespirationRate: 12, PositiveEndExpiratoryPressure: 5, FractionInspiredOxygen: 0.4, InspiratoryPeriod: 1.0, Flow: 60 } },
+		{ id: 'ards-hypo', label: 'ARDS grave + ipovolemia', desc: 'Lo scenario in cui la PEEP alta o il reclutamento fanno crollare la gittata: guarda PPV, PVC e DO₂. Prova poi un bolo di fluidi.',
+			patient: { Volemia: 0.85 }, conditions: { 'ARDS': { LeftLungSeverity: 0.85, RightLungSeverity: 0.85 } },
+			ventilator: { mode: 'VC', TidalVolume: 430, RespirationRate: 24, PositiveEndExpiratoryPressure: 8, FractionInspiredOxygen: 0.8, InspiratoryPeriod: 0.8, Flow: 50 } },
+		{ id: 'copd', label: 'BPCO riacutizzata', desc: 'Resistenze alte e costante di tempo lunga: con FR alta compare auto-PEEP. Riduci FR o Ti e osserva PEEP totale e pressione arteriosa.',
+			conditions: { 'COPD': { BronchitisSeverity: 0.7, LeftLungEmphysemaSeverity: 0.6, RightLungEmphysemaSeverity: 0.6 } },
+			ventilator: { mode: 'VC', TidalVolume: 500, RespirationRate: 22, PositiveEndExpiratoryPressure: 5, FractionInspiredOxygen: 0.35, InspiratoryPeriod: 1.2, Flow: 50 } },
+		{ id: 'lvd', label: 'Scompenso sistolico con edema', desc: 'Nel cuore insufficiente la pressione positiva riduce il postcarico del VS: la PEEP può migliorare gittata e ossigenazione.',
+			patient: { Volemia: 1.15 }, conditions: { 'Chronic Ventricular Systolic Disfunction': { Severity: 0.8 }, 'ARDS': { LeftLungSeverity: 0.3, RightLungSeverity: 0.3 } },
+			ventilator: { mode: 'VC', TidalVolume: 480, RespirationRate: 18, PositiveEndExpiratoryPressure: 5, FractionInspiredOxygen: 0.6, InspiratoryPeriod: 1.0, Flow: 50 } },
+		{ id: 'obese', label: 'Obesità grave', desc: 'Parete toracica rigida e atelettasie da peso: la PEEP si trasmette molto alla pleura, ma serve per tenere aperto il polmone.',
+			patient: { Weight: 140, Height: 170 }, conditions: {},
+			ventilator: { mode: 'VC', TidalVolume: 450, RespirationRate: 16, PositiveEndExpiratoryPressure: 5, FractionInspiredOxygen: 0.5, InspiratoryPeriod: 1.0, Flow: 50 } },
+		{ id: 'tamponade', label: 'Versamento pericardico', desc: 'Il riempimento cardiaco è già limitato dal pericardio: anche piccoli aumenti di PEEP riducono molto la gittata.',
+			conditions: { 'Pericardial Effusion': { AccumulatedVolume: 550 } },
+			ventilator: { mode: 'VC', TidalVolume: 500, RespirationRate: 14, PositiveEndExpiratoryPressure: 5, FractionInspiredOxygen: 0.4, InspiratoryPeriod: 1.0, Flow: 60 } }
+	];
+
+	const TREND_SERIES = [
+		{ label: 'PA media', keys: ['map'], unit: 'mmHg', dec: 0, colors: ['--c-hemo'], limit: 65, minSpan: 4 },
+		{ label: 'Gittata cardiaca', keys: ['co'], unit: 'L/min', dec: 1, colors: ['--c-hemo'], minSpan: 0.3 },
+		{ label: 'SpO₂', keys: ['spo2'], unit: '%', dec: 0, colors: ['--c-gas'], limit: 92, max: 100, minSpan: 1 },
+		{ label: 'PaCO₂', keys: ['paco2'], unit: 'mmHg', dec: 0, colors: ['--c-gas'], minSpan: 2 },
+		{ label: 'Pplat / PEEP tot', keys: ['pplat', 'peepTot'], unit: 'cmH₂O', dec: 0, colors: ['--c-mech', '--c-vent'], limit: 30, minSpan: 2 },
+		{ label: 'Compliance', keys: ['crs'], unit: 'mL/cmH₂O', dec: 0, colors: ['--c-mech'], minSpan: 2 },
+		{ label: 'Aerazione', keys: ['aeration'], unit: '%', dec: 0, colors: ['--c-mech'], minSpan: 2 },
+		{ label: 'DO₂', keys: ['do2'], unit: 'mL/min', dec: 0, colors: ['--c-o2'], minSpan: 20 }
+	];
+
+	const NUMERICS = [
+		{ label: 'FC', color: '#46d68c', val: o => o.hr.toFixed(0), unit: 'bpm' },
+		{ label: 'ABP', color: '#ff5d62', val: o => o.sbp.toFixed(0) + '/' + o.dbp.toFixed(0), sub: o => '(' + o.map.toFixed(0) + ')', unit: 'mmHg' },
+		{ label: 'SpO₂', color: '#5cc8f0', val: o => o.spo2.toFixed(0), unit: '%' },
+		{ label: 'EtCO₂', color: '#f4c542', val: o => o.etco2.toFixed(0), unit: 'mmHg' },
+		{ label: 'Ppicco', color: '#f4c542', val: o => o.ppeak.toFixed(0), unit: 'cmH₂O' },
+		{ label: 'Pplat', color: '#f4c542', val: o => o.pplat.toFixed(0), unit: 'cmH₂O' },
+		{ label: 'PEEP tot', color: '#f4c542', val: o => o.peepTot.toFixed(1), unit: 'cmH₂O' },
+		{ label: 'VT', color: '#5cc8f0', val: o => o.vt.toFixed(0), unit: 'mL' },
+		{ label: 'FR', color: '#5cc8f0', val: o => o.rr.toFixed(0), unit: '/min' },
+		{ label: 'GC', color: '#ff9f6b', val: o => o.co.toFixed(1), unit: 'L/min' },
+		{ label: 'PVC', color: '#b9a4ff', val: o => o.rap.toFixed(0), unit: 'mmHg' },
+		{ label: 'PAPm', color: '#e7e3d4', val: o => o.mpap.toFixed(0), unit: 'mmHg' }
+	];
+
+	//absolute significance thresholds for the narrative (others: 3% relative)
+	const SIG = { spo2: 1, ph: 0.02, strain: 0.05, ti: 0.05, fio2: 1, hb: 0.3, lactate: 0.3, autopeep: 0.5, peeptot: 0.5, ppl: 0.5, rap: 0.7, pmsf: 0.5, vrg: 0.5, symp: 5, overdist: 3, ppv: 2, recruit: 2, shunt: 1.5, vdvt: 2, rvfunc: 3 };
+
+	/* ------------------------------------------------------------ state */
+
+	let model, out, reference, graph, monitor, trends;
+	let running = true, speed = 1;
+	let history = [];
+	let events = [];
+	let maneuver = null;
+	let presetId = 'ards';
+	const fieldUpdaters = [];
+
+	const fmtTime = t => {
+		t = Math.max(0, Math.floor(t));
+		const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60;
+		return (h ? h + ':' + String(m).padStart(2, '0') : String(m).padStart(2, '0')) + ':' + String(s).padStart(2, '0');
+	};
+	const fmtNum = (v, dec) => isFinite(v) ? v.toFixed(dec).replace('-', '−') : '–';
+	const snapshot = o => { const s = Object.assign({}, o); delete s.wave; return s; };
+
+	/* ------------------------------------------------------------ controls */
+
+	function slider(container, id, spec, get, onCommit) {
+		const row = document.createElement('div');
+		row.className = 'field';
+		row.innerHTML = '<div class="field-top"><label for="' + id + '"></label><span class="field-val"><input type="number" id="' + id + '-n" aria-label=""><span class="unit"></span></span></div>' +
+			'<input type="range" id="' + id + '">';
+		row.querySelector('label').textContent = spec.label;
+		row.querySelector('.unit').textContent = spec.unit || '';
+		const range = row.querySelector('input[type=range]'), num = row.querySelector('input[type=number]');
+		num.setAttribute('aria-label', spec.label);
+		[range, num].forEach(i => { i.min = spec.min; i.max = spec.max; i.step = spec.step; });
+		const set = v => { range.value = v; num.value = (+v).toFixed(spec.dec); };
+		range.addEventListener('input', () => { num.value = (+range.value).toFixed(spec.dec); });
+		range.addEventListener('change', () => onCommit(+range.value));
+		num.addEventListener('change', () => {
+			const v = Math.min(spec.max, Math.max(spec.min, +num.value));
+			set(v); onCommit(v);
+		});
+		container.appendChild(row);
+		const update = () => { if (document.activeElement !== range && document.activeElement !== num) set(get()); };
+		update();
+		return { row, update };
+	}
+
+	function buildVentFields() {
+		const box = $('vent-fields');
+		box.innerHTML = '';
+		const v = model.ventilator;
+		MODE_FIELDS[v.mode].forEach(key => {
+			slider(box, 'v-' + key, VENT_FIELDS[key], () => model.ventilator[key], val => commitVent({ [key]: val }));
+		});
+		if (v.mode !== 'CPAP') {
+			const row = document.createElement('div');
+			row.className = 'field field-inline';
+			row.innerHTML = '<label for="v-assist">Modalità</label><select id="v-assist"><option value="0">AC (assistita-controllata)</option><option value="1">CMV (controllata)</option></select>';
+			const sel = row.querySelector('select');
+			sel.value = String(v.AssistedMode);
+			sel.addEventListener('change', () => commitVent({ AssistedMode: +sel.value }));
+			box.appendChild(row);
+		}
+		document.querySelectorAll('#vent-mode button').forEach(b => {
+			const on = b.dataset.mode === v.mode;
+			b.classList.toggle('on', on);
+			b.setAttribute('aria-checked', on);
+		});
+		syncPeepChips();
+	}
+
+	function syncVentUI() { buildVentFields(); }
+
+	function syncPeepChips() {
+		document.querySelectorAll('#peep-chips button').forEach(b =>
+			b.classList.toggle('on', +b.dataset.peep === model.ventilator.PositiveEndExpiratoryPressure));
+	}
+
+	function describeVentChange(before, after) {
+		const parts = [];
+		if (before.mode !== after.mode) parts.push('Modalità ' + before.mode + ' → ' + after.mode);
+		for (const k in VENT_FIELDS) {
+			if (before[k] !== after[k] && MODE_FIELDS[after.mode].includes(k)) {
+				const f = VENT_FIELDS[k];
+				const short = k === 'PositiveEndExpiratoryPressure' ? 'PEEP' : f.label.replace(/ \(.*\)/, '');
+				parts.push(short + ' ' + fmtNum(before[k], f.dec) + ' → ' + fmtNum(after[k], f.dec) + (f.unit ? ' ' + f.unit : ''));
+			}
+		}
+		if (before.AssistedMode !== after.AssistedMode) parts.push(after.AssistedMode === 0 ? 'Modalità AC' : 'Modalità CMV');
+		return parts.join(', ');
+	}
+
+	function commitVent(params, silent) {
+		const before = clone(model.ventilator);
+		model.setVentilator(params);
+		let note = '';
+		if (params.mode === 'CPAP' && model.patient.Sedation > 0.8) {
+			model.setPatient({ Sedation: 0.3 });
+			note = 'Sedazione ridotta a 0,3 per consentire il respiro spontaneo in CPAP.';
+			fieldUpdaters.forEach(u => u());
+		}
+		const text = describeVentChange(before, model.ventilator);
+		if (params.mode) buildVentFields(); else syncPeepChips();
+		if (text && !silent) logEvent(text, note);
+	}
+
+	function buildPatientFields() {
+		const box = $('patient-fields');
+		box.innerHTML = '';
+		const sexRow = document.createElement('div');
+		sexRow.className = 'field field-inline';
+		sexRow.innerHTML = '<label for="p-sex">Sesso</label><select id="p-sex"><option value="M">Maschio</option><option value="F">Femmina</option></select>';
+		const sexSel = sexRow.querySelector('select');
+		sexSel.value = model.patient.Sex;
+		sexSel.addEventListener('change', () => { model.setPatient({ Sex: sexSel.value }); logEvent('Sesso: ' + (sexSel.value === 'M' ? 'maschio' : 'femmina')); });
+		box.appendChild(sexRow);
+		fieldUpdaters.length = 0;
+		fieldUpdaters.push(() => { sexSel.value = model.patient.Sex; });
+		for (const key in PATIENT_FIELDS) {
+			const spec = PATIENT_FIELDS[key];
+			const f = slider(box, 'p-' + key, spec, () => model.patient[key], val => {
+				const old = model.patient[key];
+				model.setPatient({ [key]: val });
+				logEvent(spec.label.replace(/ \(.*\)/, '') + ' ' + fmtNum(old, spec.dec) + ' → ' + fmtNum(val, spec.dec) + (spec.unit ? ' ' + spec.unit : ''));
+			});
+			fieldUpdaters.push(f.update);
+		}
+	}
+
+	function buildConditionFields() {
+		const box = $('condition-fields');
+		box.innerHTML = '';
+		CONDITIONS.forEach((c, ci) => {
+			const wrap = document.createElement('div');
+			wrap.className = 'condition';
+			const id = 'c-' + ci;
+			wrap.innerHTML = '<label class="check" for="' + id + '"><input type="checkbox" id="' + id + '"><span></span><em class="engine-name"></em></label><div class="cond-params"></div>';
+			wrap.querySelector('span').textContent = c.label;
+			wrap.querySelector('.engine-name').textContent = c.name;
+			const chk = wrap.querySelector('input');
+			const params = wrap.querySelector('.cond-params');
+			const current = () => model.conditions[c.name];
+			const valueOf = p => { const cur = current(); return cur && cur[p.keys[0]] !== undefined ? cur[p.keys[0]] : p.def; };
+			chk.checked = !!current();
+			params.hidden = !chk.checked;
+			c.params.forEach((p, pi) => {
+				slider(params, id + '-' + pi, { label: p.label, unit: p.unit || '', min: p.min, max: p.max, step: p.step, dec: p.step < 0.1 ? 2 : p.step < 1 ? 1 : 0 },
+					() => valueOf(p), val => {
+						const cur = Object.assign({}, current() || {});
+						p.keys.forEach(k => { cur[k] = val; });
+						model.setCondition(c.name, cur);
+						logEvent(c.label + ': ' + p.label.replace(/ \(.*\)/, '').toLowerCase() + ' ' + fmtNum(val, p.step < 1 ? 2 : 0) + (p.unit ? ' ' + p.unit : ''));
+					});
+			});
+			chk.addEventListener('change', () => {
+				if (chk.checked) {
+					const cur = {};
+					c.params.forEach(p => p.keys.forEach(k => { cur[k] = valueOf(p); }));
+					model.setCondition(c.name, cur);
+					logEvent(c.label + ' attivata');
+				} else {
+					model.setCondition(c.name, null);
+					logEvent(c.label + ' rimossa');
+				}
+				params.hidden = !chk.checked;
+			});
+			box.appendChild(wrap);
+		});
+	}
+
+	function buildActionFields() {
+		const box = $('action-fields');
+		box.innerHTML = '';
+		ACTIONS.forEach((a, i) => {
+			slider(box, 'a-' + i, { label: a.label + ' · ' + a.name, unit: '', min: 0, max: 1, step: 0.05, dec: 2 },
+				() => model.actions[a.name] || 0, val => {
+					model.setAction(a.name, val);
+					logEvent(a.label + ' ' + (val > 0 ? 'gravità ' + val.toFixed(2) : 'risolta'));
+				});
+		});
+	}
+
+	function buildAllControls() {
+		buildVentFields();
+		buildPatientFields();
+		buildConditionFields();
+		buildActionFields();
+	}
+
+	/* ------------------------------------------------------------ presets & import */
+
+	function loadPreset(id) {
+		const p = PRESETS.find(x => x.id === id) || PRESETS[0];
+		presetId = p.id;
+		stopManeuver(true);
+		model = new PhysiologyModel({
+			patient: Object.assign({}, DEFAULT_PATIENT, p.patient || {}),
+			ventilator: Object.assign({}, DEFAULT_VENTILATOR, p.ventilator || {}),
+			conditions: clone(p.conditions || {})
+		});
+		restart('Scenario: ' + p.label);
+		$('preset-desc').textContent = p.desc;
+		$('preset').value = p.id;
+	}
+
+	function restart(label) {
+		out = model.out;
+		reference = snapshot(out);
+		history = [];
+		events = [];
+		trends.clear();
+		recordHistory();
+		trends.record(out);
+		buildAllControls();
+		logEvent(label, '', true);
+		updateUI(0);
+	}
+
+	function patientFromJson(json) {
+		const p = json.InitialPatient || json.CurrentPatient || json.Patient || json;
+		const scalar = key => {
+			const f = p[key];
+			if (!f || typeof f !== 'object') return null;
+			const inner = Object.values(f)[0];
+			return inner && inner.Value !== undefined ? { v: +inner.Value, u: inner.Unit || '' } : null;
+		};
+		const res = {};
+		if (p.Name) res.Name = p.Name;
+		if (p.Sex) res.Sex = String(p.Sex).toLowerCase().startsWith('f') ? 'F' : 'M';
+		const age = scalar('Age'); if (age) res.Age = age.v;
+		const h = scalar('Height');
+		if (h) res.Height = h.u === 'in' ? h.v * 2.54 : h.u === 'm' ? h.v * 100 : h.u === 'ft' ? h.v * 30.48 : h.v;
+		const w = scalar('Weight');
+		if (w) res.Weight = w.u === 'lb' ? w.v * 0.4536 : w.u === 'g' ? w.v / 1000 : w.v;
+		else if (res.Height) res.Weight = 21.75 * Math.pow(res.Height / 100, 2); // Pulse default BMI
+		[['HeartRateBaseline'], ['SystolicArterialPressureBaseline'], ['DiastolicArterialPressureBaseline'], ['RespirationRateBaseline'], ['BasalMetabolicRate'], ['BodyFatFraction']]
+			.forEach(([k]) => { const s = scalar(k); if (s) res[k] = s.v; });
+		if (res.Height === undefined && res.Age === undefined && res.Weight === undefined) return null;
+		['Height', 'Weight'].forEach(k => { if (res[k] !== undefined) res[k] = Math.round(res[k]); });
+		return res;
+	}
+
+	function importFile(file) {
+		const reader = new FileReader();
+		reader.onload = () => {
+			let parsed = null;
+			try { parsed = patientFromJson(JSON.parse(reader.result)); } catch (e) { parsed = null; }
+			if (!parsed) {
+				$('import-msg').textContent = 'Il file non contiene dati paziente riconoscibili (servono almeno età, peso o altezza). Usa un file di resources/patients o di states.';
+				return;
+			}
+			stopManeuver(true);
+			model = new PhysiologyModel({
+				patient: Object.assign({}, DEFAULT_PATIENT, parsed),
+				ventilator: clone(model.ventilator),
+				conditions: clone(model.conditions),
+				actions: clone(model.actions)
+			});
+			$('import-msg').textContent = 'Importato: ' + (parsed.Name || file.name) + ' (' + Object.keys(parsed).filter(k => k !== 'Name').length + ' parametri).';
+			restart('Paziente importato: ' + (parsed.Name || file.name));
+		};
+		reader.readAsText(file);
+	}
+
+	/* ------------------------------------------------------------ maneuvers */
+
+	function runManeuver(m) {
+		stopManeuver(true);
+		m.i = -1; m.elapsed = 0; m.total = m.steps.reduce((a, s) => a + s.dur, 0);
+		maneuver = m;
+		$('maneuver-status').hidden = false;
+		$('ms-name').textContent = m.name;
+		if (m.start) m.start();
+		nextStep();
+	}
+
+	function nextStep() {
+		const m = maneuver;
+		m.i++;
+		if (m.i >= m.steps.length) {
+			maneuver = null;
+			$('maneuver-status').hidden = true;
+			if (m.done) m.done();
+			return;
+		}
+		m.tStep = 0;
+		m.steps[m.i].start();
+		syncVentUI();
+	}
+
+	function tickManeuver(dt) {
+		const m = maneuver;
+		if (!m) return;
+		m.tStep += dt; m.elapsed += dt;
+		const st = m.steps[m.i];
+		if (m.tStep >= st.dur) {
+			if (st.end) st.end();
+			nextStep();
+		}
+	}
+
+	function stopManeuver(silent) {
+		if (!maneuver) return;
+		const m = maneuver;
+		maneuver = null;
+		model.stopOverride();
+		if (m.restore) m.restore();
+		$('maneuver-status').hidden = true;
+		syncVentUI();
+		if (!silent) logEvent(m.name + ' interrotta');
+	}
+
+	function sustainedInflation() {
+		const p = Math.min(50, Math.max(20, +$('si-p').value || 40));
+		const t = Math.min(60, Math.max(10, +$('si-t').value || 40));
+		runManeuver({
+			name: 'Insufflazione sostenuta',
+			steps: [{ label: 'CPAP ' + p + ' cmH₂O', dur: t, start: () => model.startSustainedInflation(p, t + 1), end: () => model.stopOverride() }],
+			start: () => logEvent('Reclutamento: insufflazione sostenuta ' + p + ' cmH₂O × ' + t + ' s',
+				'Durante la manovra la pressione pleurica sale: il ritorno venoso crolla, la PA scende e il barocettore alza la FC. In apnea la PaCO₂ sale. Al termine riprende la ventilazione con la PEEP impostata: se è sotto la pressione di chiusura degli alveoli appena aperti, il polmone ricollassa in pochi minuti.'),
+			done: () => logEvent('Fine insufflazione, ripresa ventilazione (PEEP ' + model.ventilator.PositiveEndExpiratoryPressure + ')')
+		});
+	}
+
+	function staircase() {
+		const saved = clone(model.ventilator);
+		const vt = saved.mode === 'VC' ? saved.TidalVolume : Math.round(6 * out.pbw / 10) * 10;
+		const rr = saved.mode === 'CPAP' ? 20 : saved.RespirationRate;
+		const results = [];
+		const steps = [];
+		[[20, 35], [25, 40], [30, 45]].forEach(([peep, pinsp]) => steps.push({
+			label: 'Reclutamento PC: PEEP ' + peep + ', Pinsp ' + pinsp, dur: 30,
+			start: () => model.setVentilator({ mode: 'PC', PositiveEndExpiratoryPressure: peep, InspiratoryPressure: pinsp, RespirationRate: rr, InspiratoryPeriod: 1.0, Slope: 0.2, AssistedMode: 1 })
+		}));
+		for (let peep = 24; peep >= 6; peep -= 2) steps.push({
+			label: 'Titolazione VC: PEEP ' + peep, dur: 45,
+			start: () => model.setVentilator({ mode: 'VC', TidalVolume: vt, RespirationRate: rr, Flow: saved.Flow || 50, InspiratoryPeriod: saved.mode === 'VC' ? saved.InspiratoryPeriod : 1.0, PositiveEndExpiratoryPressure: peep }),
+			end: () => {
+				const o = model.out;
+				results.push({ peep, crs: o.crs, pplat: o.pplat, dp: o.dp, spo2: o.spo2, co: o.co, map: o.map, do2: o.do2 });
+			}
+		});
+		steps.push({ label: 'Nuovo reclutamento: 40 cmH₂O × 30 s', dur: 30, start: () => model.startSustainedInflation(40, 31), end: () => model.stopOverride() });
+		runManeuver({
+			name: 'Reclutamento a scalini + PEEP decrementale',
+			steps,
+			start: () => logEvent('Reclutamento a scalini (PC, PEEP 20→30, ΔP 15) e titolazione decrementale della PEEP (24→6, VT ' + vt + ' mL)',
+				'La PEEP ottimale è quella con la compliance più alta durante la discesa: sotto di essa il polmone inizia a ricollassare (derecruitment), sopra prevale la sovradistensione.'),
+			restore: () => model.setVentilator(saved),
+			done: () => {
+				let best = results[0];
+				results.forEach(r => { if (r.crs > best.crs + 0.5) best = r; });
+				const target = Math.min(24, best.peep + 2);
+				model.setVentilator(Object.assign({}, saved.mode === 'CPAP' ? { mode: 'VC', TidalVolume: vt, RespirationRate: rr } : saved, { PositiveEndExpiratoryPressure: target }));
+				syncVentUI();
+				logEvent('PEEP impostata a ' + target + ' cmH₂O (compliance massima a PEEP ' + best.peep + ', + 2)', '', false, { rows: results, best: best.peep });
+			}
+		});
+	}
+
+	/* ------------------------------------------------------------ narrative */
+
+	function logEvent(text, note, silentRef, table) {
+		const snap = snapshot(model.out || out);
+		events.forEach(e => { if (!e.done) { e.done = true; e.final = snap; } });
+		const ev = { t: model.t, text, note: note || '', snap, done: false, table };
+		events.unshift(ev);
+		if (events.length > 30) events.pop();
+		if (!silentRef) trends.mark(model.t, text);
+		reference = snap;
+		renderEvents();
+	}
+
+	function significant(n, a, b) {
+		const d = b - a;
+		if (!isFinite(d) || d === 0) return false;
+		if (SIG[n.id] !== undefined) return Math.abs(d) >= SIG[n.id];
+		return Math.abs(d) / (Math.abs(a) + 1e-6) >= 0.03 && Math.abs(d) >= Math.pow(10, -n.dec);
+	}
+
+	const CAT_ORDER = ['vent', 'pat', 'mech', 'gas', 'hemo', 'o2'];
+
+	function analyze(before, now) {
+		const changes = [];
+		C.NODES.forEach(n => {
+			const a = C.nodeValue(n, before), b = C.nodeValue(n, now);
+			if (significant(n, a, b)) changes.push({ n, a, b, d: b - a });
+		});
+		const map = new Map(changes.map(c => [c.n.id, c]));
+		changes.forEach(c => {
+			c.causes = c.n.in.filter(([s, sign]) => {
+				const ci = map.get(s);
+				if (!ci) return false;
+				if (sign === '±') return true;
+				return Math.sign(ci.d) * (sign === '+' ? 1 : -1) === Math.sign(c.d);
+			}).map(([s]) => map.get(s));
+		});
+		changes.sort((x, y) => CAT_ORDER.indexOf(x.n.cat) - CAT_ORDER.indexOf(y.n.cat) || x.n.col - y.n.col || x.n.row - y.n.row);
+		return changes;
+	}
+
+	function renderEvents() {
+		const box = $('events');
+		box.innerHTML = '';
+		if (!events.length) return;
+		events.slice(0, 8).forEach((ev, idx) => {
+			const card = document.createElement('article');
+			card.className = 'event' + (idx === 0 ? ' latest' : '');
+			const head = document.createElement('div');
+			head.className = 'ev-head';
+			head.innerHTML = '<time></time><strong></strong>';
+			head.querySelector('time').textContent = fmtTime(ev.t);
+			head.querySelector('strong').textContent = ev.text;
+			card.appendChild(head);
+			if (ev.note) {
+				const p = document.createElement('p');
+				p.className = 'ev-note';
+				p.textContent = ev.note;
+				card.appendChild(p);
+			}
+			if (ev.table) card.appendChild(titrationTable(ev.table));
+			const after = ev.done ? ev.final : snapshot(out);
+			const elapsed = (ev.done ? ev.final.t : out.t) - ev.t;
+			const changes = analyze(ev.snap, after).filter(c => !(c.n.cat === 'vent' && idx > 0));
+			const meta = document.createElement('p');
+			meta.className = 'ev-meta';
+			meta.textContent = elapsed < 1 ? 'in attesa degli effetti…' :
+				(ev.done ? 'effetti fino all’intervento successivo (' : 'effetti dopo ') + fmtTime(elapsed) + (ev.done ? ')' : ' min') +
+				(changes.length ? '' : ': nessuna variazione rilevante');
+			card.appendChild(meta);
+			if (changes.length && (idx < 3)) {
+				const ul = document.createElement('ul');
+				ul.className = 'ev-list';
+				changes.slice(0, idx === 0 ? 16 : 6).forEach(c => {
+					const li = document.createElement('li');
+					const up = c.d > 0;
+					li.innerHTML = '<span class="arrow ' + (up ? 'up' : 'down') + '">' + (up ? '▲' : '▼') + '</span>' +
+						'<div class="ev-body"><button class="linklike"></button> <span class="ev-vals"></span><span class="why"></span></div>';
+					const btn = li.querySelector('button');
+					btn.textContent = c.n.labelFn ? c.n.labelFn(after) : c.n.label;
+					btn.addEventListener('click', () => graph.select(c.n.id));
+					const unit = c.n.unitFn ? c.n.unitFn(after) : c.n.unit;
+					li.querySelector('.ev-vals').textContent = fmtNum(c.a, c.n.dec) + ' → ' + fmtNum(c.b, c.n.dec) + (unit ? ' ' + unit : '');
+					if (c.causes.length) li.querySelector('.why').textContent = 'per ' + c.causes.slice(0, 3).map(x => (x.d > 0 ? '↑ ' : '↓ ') + x.n.label.toLowerCase()).join(', ');
+					ul.appendChild(li);
+				});
+				card.appendChild(ul);
+			}
+			box.appendChild(card);
+		});
+	}
+
+	function titrationTable(tab) {
+		const wrap = document.createElement('div');
+		wrap.className = 'table-wrap';
+		const t = document.createElement('table');
+		t.innerHTML = '<thead><tr><th>PEEP</th><th>Crs</th><th>Pplat</th><th>ΔP</th><th>SpO₂</th><th>GC</th><th>PAM</th></tr></thead><tbody></tbody>';
+		const tb = t.querySelector('tbody');
+		tab.rows.forEach(r => {
+			const tr = document.createElement('tr');
+			if (r.peep === tab.best) tr.className = 'best';
+			[r.peep, r.crs.toFixed(0), r.pplat.toFixed(0), r.dp.toFixed(0), r.spo2.toFixed(0), r.co.toFixed(1), r.map.toFixed(0)].forEach(v => {
+				const td = document.createElement('td'); td.textContent = v; tr.appendChild(td);
+			});
+			tb.appendChild(tr);
+		});
+		wrap.appendChild(t);
+		return wrap;
+	}
+
+	/* ------------------------------------------------------------ inspector */
+
+	let inspectorRefs = null;
+
+	function showNode(id) {
+		const empty = $('node-empty'), box = $('node-detail');
+		if (!id) { empty.hidden = false; box.hidden = true; inspectorRefs = null; return; }
+		const n = C.byId[id], cat = C.CATEGORIES[n.cat];
+		empty.hidden = true; box.hidden = false;
+		box.innerHTML =
+			'<div class="nd-cat"><i></i><span></span><button class="btn btn-small nd-close" aria-label="Chiudi">×</button></div>' +
+			'<h2 class="nd-title"></h2>' +
+			'<div class="nd-value"><output class="nd-big"></output><span class="nd-unit"></span><span class="pill"></span></div>' +
+			'<p class="nd-sub"></p>' +
+			'<canvas class="nd-spark" aria-label="Andamento negli ultimi 10 minuti"></canvas>' +
+			'<h3>Cosa rappresenta</h3><p class="nd-desc"></p>' +
+			'<h3>Come si calcola</h3><p class="formula"></p>' +
+			'<h3>Dipende da</h3><div class="rel" data-dir="in"></div>' +
+			'<h3>Influenza</h3><div class="rel" data-dir="out"></div>';
+		box.querySelector('.nd-cat i').style.background = cat.color;
+		box.querySelector('.nd-cat span').textContent = cat.label;
+		box.querySelector('.nd-close').addEventListener('click', () => graph.select(null));
+		box.querySelector('.nd-title').textContent = n.labelFn ? n.labelFn(out) : n.label;
+		box.querySelector('.nd-desc').textContent = n.desc;
+		box.querySelector('.formula').textContent = n.formula;
+		const rel = (dir, list) => {
+			const c = box.querySelector('.rel[data-dir="' + dir + '"]');
+			if (!list.length) { c.innerHTML = '<p class="hint">Parametro impostato dall’operatore o dalla condizione del paziente.</p>'; return []; }
+			return list.map(([other, sign]) => {
+				const b = document.createElement('button');
+				b.className = 'rel-chip';
+				b.innerHTML = '<span class="sgn"></span><span class="rl"></span><span class="rv"></span>';
+				b.querySelector('.sgn').textContent = sign === '-' ? '−' : sign;
+				b.querySelector('.sgn').className = 'sgn ' + (sign === '+' ? 'pos' : sign === '-' ? 'neg' : 'amb');
+				b.querySelector('.rl').textContent = C.byId[other].label;
+				b.addEventListener('click', () => graph.select(other));
+				c.appendChild(b);
+				return { id: other, el: b.querySelector('.rv') };
+			});
+		};
+		inspectorRefs = { id, box, chips: rel('in', n.in).concat(rel('out', n.out)) };
+		updateInspector();
+	}
+
+	function updateInspector() {
+		if (!inspectorRefs) return;
+		const n = C.byId[inspectorRefs.id], box = inspectorRefs.box;
+		const v = C.nodeValue(n, out);
+		box.querySelector('.nd-big').textContent = fmtNum(v, n.dec);
+		box.querySelector('.nd-unit').textContent = n.unitFn ? n.unitFn(out) : n.unit;
+		box.querySelector('.nd-sub').textContent = n.subFn ? n.subFn(out) : '';
+		const st = C.nodeStatus(n, out);
+		const pill = box.querySelector('.pill');
+		pill.className = 'pill ' + st;
+		pill.textContent = n.range ? (st === 'ok' ? 'nel range' : st === 'warn' ? 'attenzione' : 'critico') : '';
+		pill.hidden = !n.range;
+		inspectorRefs.chips.forEach(c => {
+			const o = C.byId[c.id];
+			c.el.textContent = fmtNum(C.nodeValue(o, out), o.dec);
+		});
+		const rows = history.filter(r => r.t >= out.t - 600);
+		sparkline(box.querySelector('.nd-spark'), rows, n.id, cssVar('--c-' + n.cat) || '#0b6e82');
+	}
+
+	function recordHistory() {
+		const row = { t: out.t };
+		C.NODES.forEach(n => { row[n.id] = C.nodeValue(n, out); });
+		history.push(row);
+		if (history.length > 3600) history.shift();
+	}
+
+	/* ------------------------------------------------------------ monitor numerics */
+
+	let numericEls = [];
+	function buildNumerics() {
+		const box = $('numerics');
+		box.innerHTML = '';
+		numericEls = NUMERICS.map(nm => {
+			const d = document.createElement('div');
+			d.className = 'num';
+			d.style.setProperty('--num-color', nm.color);
+			d.innerHTML = '<span class="num-label"></span><span class="num-val"></span><span class="num-unit"></span>';
+			d.querySelector('.num-label').textContent = nm.label;
+			d.querySelector('.num-unit').textContent = nm.unit;
+			box.appendChild(d);
+			return { nm, val: d.querySelector('.num-val'), unit: d.querySelector('.num-unit') };
+		});
+	}
+
+	/* ------------------------------------------------------------ loop */
+
+	let lastUiT = 0, lastGraphSimT = 0;
+
+	function updateUI() {
+		$('sim-time').textContent = fmtTime(out.t);
+		graph.update(out, reference, out.t - lastGraphSimT);
+		lastGraphSimT = out.t;
+		numericEls.forEach(e => {
+			e.val.textContent = e.nm.val(out);
+			e.unit.textContent = (e.nm.sub ? e.nm.sub(out) + ' ' : '') + e.nm.unit;
+		});
+		trends.draw(out);
+		updateInspector();
+		if (maneuver) {
+			const st = maneuver.steps[maneuver.i];
+			$('ms-step').textContent = st ? st.label + ' · ' + Math.max(0, st.dur - maneuver.tStep).toFixed(0) + ' s' : '';
+			$('ms-bar').style.width = (100 * maneuver.elapsed / maneuver.total).toFixed(1) + '%';
+		}
+		const latest = events[0];
+		if (latest && !latest.done) {
+			if (out.t - latest.t > 240) { latest.done = true; latest.final = snapshot(out); }
+			renderEvents();
+		}
+	}
+
+	let lastFrame = null, acc = 0, recAcc = 0;
+	function frame(now) {
+		if (lastFrame === null) lastFrame = now;
+		const realDt = Math.min(0.1, (now - lastFrame) / 1000);
+		lastFrame = now;
+		if (running) {
+			const h = speed <= 5 ? 0.1 : 0.25;
+			acc += realDt * speed;
+			let guard = 0;
+			while (acc >= h && guard++ < 400) {
+				out = model.step(h);
+				tickManeuver(h);
+				acc -= h;
+				recAcc += h;
+				if (recAcc >= 1) { recAcc -= 1; recordHistory(); trends.record(out); }
+			}
+			if (guard >= 400) acc = 0;
+		}
+		monitor.push(out, now);
+		monitor.draw(out);
+		if (now - lastUiT > 250) { lastUiT = now; updateUI(); }
+		requestAnimationFrame(frame);
+	}
+
+	/* ------------------------------------------------------------ wiring */
+
+	function wire() {
+		const presetSel = $('preset');
+		PRESETS.forEach(p => { const o = document.createElement('option'); o.value = p.id; o.textContent = p.label; presetSel.appendChild(o); });
+		presetSel.addEventListener('change', () => loadPreset(presetSel.value));
+
+		document.querySelectorAll('#vent-mode button').forEach(b => b.addEventListener('click', () => {
+			if (b.dataset.mode !== model.ventilator.mode) commitVent({ mode: b.dataset.mode });
+		}));
+		const chips = $('peep-chips');
+		[0, 5, 8, 10, 12, 15, 18, 20].forEach(p => {
+			const b = document.createElement('button');
+			b.className = 'chip';
+			b.dataset.peep = p;
+			b.textContent = p;
+			b.addEventListener('click', () => { commitVent({ PositiveEndExpiratoryPressure: p }); syncVentUI(); });
+			chips.appendChild(b);
+		});
+
+		$('m-si').addEventListener('click', sustainedInflation);
+		$('m-staircase').addEventListener('click', () => {
+			staircase();
+			if (speed < 20) setSpeed(20);
+		});
+		$('m-fluid').addEventListener('click', () => {
+			model.fluidBolus(500, 300);
+			logEvent('Bolo di fluidi 500 mL in 5 min', 'Aumenta il volume stressato e quindi la pressione media di riempimento: se il paziente è sulla parte ripida della curva di Starling (PPV alta) la gittata sale.');
+		});
+		$('m-bleed').addEventListener('click', () => {
+			model.hemorrhage(500);
+			logEvent('Emorragia acuta 500 mL');
+		});
+		$('ms-stop').addEventListener('click', () => stopManeuver(false));
+
+		$('btn-play').addEventListener('click', () => {
+			running = !running;
+			$('btn-play').innerHTML = running ? '&#10074;&#10074;' : '&#9654;';
+			$('btn-play').setAttribute('aria-label', running ? 'Pausa' : 'Riprendi');
+		});
+		document.querySelectorAll('#speed button').forEach(b => b.addEventListener('click', () => setSpeed(+b.dataset.speed)));
+		$('btn-reset').addEventListener('click', () => {
+			stopManeuver(true);
+			model.reset();
+			restart('Paziente riavviato allo stato stazionario');
+		});
+		document.querySelectorAll('#trend-span button').forEach(b => b.addEventListener('click', () => {
+			trends.span = +b.dataset.span;
+			document.querySelectorAll('#trend-span button').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-checked', x === b); });
+			trends.draw(out);
+		}));
+
+		$('btn-ref').addEventListener('click', () => { reference = snapshot(out); graph.update(out, reference, 0); });
+		$('z-in').addEventListener('click', () => graph.zoom(1 / 1.2));
+		$('z-out').addEventListener('click', () => graph.zoom(1.2));
+		$('z-fit').addEventListener('click', () => graph.fit());
+		$('z-reset').addEventListener('click', () => graph.resetLayout());
+		$('import-file').addEventListener('change', ev => { if (ev.target.files[0]) importFile(ev.target.files[0]); ev.target.value = ''; });
+	}
+
+	function setSpeed(s) {
+		speed = s;
+		document.querySelectorAll('#speed button').forEach(b => {
+			const on = +b.dataset.speed === s;
+			b.classList.toggle('on', on);
+			b.setAttribute('aria-checked', on);
+		});
+	}
+
+	function init() {
+		graph = new window.NodeGraph($('graph'), C, showNode);
+		monitor = new Monitor($('monitor'));
+		trends = new Trends($('trends'), TREND_SERIES);
+		buildNumerics();
+		wire();
+		loadPreset(presetId);
+		requestAnimationFrame(frame);
+	}
+
+	init();
+})();
