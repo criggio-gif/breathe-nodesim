@@ -125,6 +125,18 @@ check('West zones: high PEEP raises mean PAP, more in hypovolemia (alveolar pres
 	assert(hypo.zone > normo.zone && hypo.waterfall > 0, 'zone 1-2 fraction');
 });
 
+check('RV function: lowering volemia at high PEEP does not improve it (RV-PA coupling, not mPAP)', () => {
+	const rv = vol => {
+		const m = new PhysiologyModel({ patient: { Volemia: vol }, conditions: ARDS });
+		m.setVentilator({ PositiveEndExpiratoryPressure: 20 });
+		return run(m, 300);
+	};
+	const normo = rv(1), hypo = rv(0.8);
+	assert(hypo.mpap <= normo.mpap + 0.5, 'setup: mPAP should not rise with hypovolemia');
+	assert(hypo.rvFunc < normo.rvFunc, 'RV function ' + hypo.rvFunc + ' should be < ' + normo.rvFunc);
+	assert(new PhysiologyModel().out.rvFunc > 99, 'healthy RV at rest');
+});
+
 check('pericardial effusion lowers cardiac output', () => {
 	const a = new PhysiologyModel().out;
 	const b = new PhysiologyModel({ conditions: { 'Pericardial Effusion': { AccumulatedVolume: 700 } } }).out;

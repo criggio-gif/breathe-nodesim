@@ -194,9 +194,17 @@
 				E(V('PAWP', o.pawp, 1), [V('Ppl', o.pplMeanMmHg, 1, 'ppl'), '+', V('P transm. AS', o.x.lapTm, 1)], 'La pressione pleurica si somma alla pressione transmurale dell\'atrio sinistro.')
 			];
 		},
-		rvfunc: o => [
-			E(V('f VD', o.rvFunc / 100, 2, 'rvfunc'), [F([K(1)], [K(1), '+', P(['(', F(['max', '(', K(0), ',', V('mPAP', o.x.prevMpap, 1, 'mpap'), '−', K(22), ')'], [K(18)]), ')'], [K(2)])])])
-		],
+		rvfunc: o => {
+			const r = o.x.rvCoupling;
+			return [
+				r >= 1.2
+					? E(V('f VD →', o.x.rvTarget, 2), [K(1)], 'Accoppiamento buono (Ees/Ea ≥ 1,2): il VD regge il postcarico.')
+					: E(V('f VD →', o.x.rvTarget, 2), ['max', '(', K(0.5), ',', F([K(1)], [K(1), '+', P(['(', K(1.2), '−', V('Ees/Ea', r, 2), ')'], [K(2)])]), ')'], 'Il VD si sta disaccoppiando dall\'arteria polmonare.'),
+				E(V('Ees/Ea', r, 2), [F([V('Ees', o.x.eesRV, 2)], [V('Ea', o.x.eaRV, 2)])], 'Ees: elastanza telesistolica del VD (contrattilità), indicizzata alla superficie corporea.'),
+				E(V('Ea', o.x.eaRV, 2), [F([V('mPAP', o.mpap, 1, 'mpap'), '−', V('Ppl', o.pplMeanMmHg, 1, 'ppl')], [V('GSi', o.sv / o.bsa, 1, 'sv')])], 'Postcarico del VD: pressione polmonare transmurale per unità di gittata sistolica indicizzata (mL/m²).'),
+				E(V('f VD', o.rvFunc / 100, 2, 'rvfunc'), ['→', V('bersaglio', o.x.rvTarget, 2), '  (τ = 4 s)'])
+			];
+		},
 		ppv: o => [
 			E(V('PPV', o.ppv, 1, 'ppv'), [K(2), '+', K(10), '·', F([V('ΔPpl tidal', o.x.swing, 2, 'ppl'), '·', V('pendenza Starling', o.x.slope, 2)], [V('GC', o.co, 2, 'co')])],
 				'La pendenza è dGC/dPVC al punto di lavoro: alta nel paziente precarico-dipendente (ipovolemia).')

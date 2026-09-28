@@ -19,6 +19,7 @@
 	'use strict';
 
 	const CMH2O_TO_MMHG = 0.7355;
+	const EES_RV_INDEXED = 0.9; // RV end-systolic elastance, mmHg/(mL/m²)
 	const P_ATM = 760, P_H2O = 47;
 
 	const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -121,7 +122,8 @@
 				fluid: 0,       // mL of intravascular volume added (+) or lost (-)
 				infusion: 0,    // mL still to be infused
 				infusionRate: 0,// mL/s
-				hbDil: 1
+				hbDil: 1,
+				rvFunc: 1       // right ventricular function (RV-PA coupling), smoothed
 			};
 			this.prev = { pplat: 20, pao2: 90, pvo2: 40, paco2: 40, ph: 7.4, mpap: 16, overdist: 0 };
 			this.settle(900);
@@ -388,7 +390,7 @@
 			const comax0 = d.co0 / (1 - Math.exp(-(rapRef - 2.2) / 3.5));
 			const hrFactor = Math.pow(clamp(S.hr / P.HeartRateBaseline, 0.4, 2.5), 0.5);
 			const contract = (1 - 0.5 * d.lvd) * (1 + 0.25 * S.symp);
-			h.rvFunc = 1 / (1 + Math.pow(Math.max(0, prev.mpap - 22) / 18, 2));
+			h.rvFunc = S.rvFunc;
 			h.lvUnload = 1 + d.lvd * 0.05 * Math.max(0, pplMean);
 			const comax = comax0 * hrFactor * contract * h.rvFunc * h.lvUnload;
 			Object.assign(h, { kp, comax, comax0, hrFactor, contract, rapRef });
@@ -556,6 +558,16 @@
 			const sympTarget = clamp(5 * e + chemo + (d.A['Acute Stress'] || 0), -0.6, 1.8);
 			S.symp = relax(S.symp, sympTarget, dt, 10);
 			const hrTarget = clamp(P.HeartRateBaseline * (1 + 0.5 * S.symp), 35, 180);
+
+			//Right ventricle - pulmonary artery coupling. RV afterload is the effective arterial elastance
+			//Ea = transmural mPAP / stroke volume (indexed): unlike mPAP it does not fall when flow falls, and
+			//pleural pressure, which surrounds both RV and pulmonary artery, is not a load. RV function stays
+			//full while Ees/Ea is comfortably above 1 and falls as coupling approaches uncoupling.
+			const eaI = Math.max(0.05, h.mpap - h.pplMean) / Math.max(5, h.sv / d.bsa);
+			const eesI = EES_RV_INDEXED;
+			const coupling = eesI / eaI;
+			const rvTarget = coupling >= 1.2 ? 1 : Math.max(0.5, 1 / (1 + Math.pow(1.2 - coupling, 2)));
+			S.rvFunc = relax(S.rvFunc, rvTarget, dt, 4);
 			S.hr = relax(S.hr, hrTarget, dt, 5);
 
 			//CO2 stores
@@ -624,6 +636,7 @@
 					ptm: h.rap - h.pplMean - h.ppc, slope: h.preloadSlope, swing: h.swing || 0,
 					pvrWU: h.pvr, pvr0: h.pvr0, pvrLow: h.pvrLow, pvrHigh: h.pvrHigh, pvrHpv: h.pvrHpv, pvrAcid: h.pvrAcid, pvrDisease: h.pvrDisease,
 					svrWU: h.svr, svr0: h.svr0, svrAcid: h.svrAcid, sympTarget, chemo, baroError: e,
+					eaRV: eaI, eesRV: eesI, rvCoupling: coupling, rvTarget, mpapTm: h.mpap - h.pplMean,
 					palv: h.palv, zone12: h.zone12, waterfall: h.waterfall, pOut: h.pOut, hydroSpan: 14, lapTm: h.pawp - h.pplMean,
 					lacTarget, prevMpap: prevUsed.mpap, prevPh: prevUsed.ph, prevPao2: prevUsed.pao2, prevPvo2: prevUsed.pvo2
 				}
