@@ -585,11 +585,18 @@ tr.best td { background: var(--accent-soft); font-weight: 600; }
 .eqv-crumb { border: 1px solid rgba(255,255,255,0.15); background: transparent; color: var(--eq-muted); border-radius: 999px; padding: 1px 9px; cursor: pointer; }
 .eqv-crumb.on { color: #fff; border-color: var(--eq-accent); }
 .eqv-sep { color: var(--eq-muted); }
-.eqv-body { overflow-y: auto; padding: 10px 14px 6px; display: flex; flex-direction: column; gap: 12px; }
+.eqv-body {
+	flex: 1 1 auto; min-height: 0; /* take the remaining height and scroll inside it */
+	overflow-y: auto; overscroll-behavior: contain;
+	padding: 10px 14px 6px; display: flex; flex-direction: column; gap: 12px;
+	scrollbar-color: rgba(255,255,255,0.25) transparent;
+}
+.eqv-head, .eqv-trail, .eqv-foot { flex: none; }
 .eqv-foot { padding: 8px 14px 12px; font-size: 11px; color: var(--eq-muted); border-top: 1px solid rgba(255,255,255,0.06); }
 
 .eq {
 	position: relative;
+	flex: none; /* never squeeze an equation to fit */
 	padding: 10px 12px;
 	border-radius: 10px;
 	background: rgba(255,255,255,0.035);
@@ -610,12 +617,13 @@ tr.best td { background: var(--accent-soft); font-weight: 600; }
 .eq.sweep::after { animation: eq-sweep 0.9s ease-out; }
 @keyframes eq-sweep { to { transform: translateX(100%); } }
 
-.eq-row { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 5px; line-height: 1.5; }
+.eq-lines { overflow-x: auto; overscroll-behavior-x: contain; padding-bottom: 2px; }
+.eq-row { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 5px; line-height: 1.5; min-width: 0; }
 .eq-sym { font: italic 400 17px/1.5 "STIX Two Text", "Cambria Math", "Times New Roman", serif; color: var(--eq-ink); }
 .eq-num { margin-top: 4px; font: 500 13.5px/1.5 var(--font-mono); color: var(--eq-num); font-variant-numeric: tabular-nums; }
 .eq-lhs { display: inline-flex; }
 .eq-eq { margin: 0 3px; color: var(--eq-muted); font-style: normal; }
-.eq-rhs { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px 5px; }
+.eq-rhs { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px 5px; flex: 1 1 auto; min-width: 0; }
 .eq-op { color: var(--eq-muted); font-style: normal; }
 .eq-num .eq-op { font-family: var(--font-mono); }
 .eq-text { color: var(--eq-muted); font: italic 13px var(--font-sans); }

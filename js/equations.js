@@ -427,7 +427,11 @@
 				num.className = 'eq-row eq-num';
 				this.renderSide(sym, eq, 'sym');
 				this.renderSide(num, eq, 'num');
-				block.append(sym, num);
+				//very wide formulas scroll sideways instead of being cut off
+				const lines = document.createElement('div');
+				lines.className = 'eq-lines';
+				lines.append(sym, num);
+				block.append(lines);
 				if (eq.note) {
 					const n = document.createElement('p');
 					n.className = 'eq-note';
