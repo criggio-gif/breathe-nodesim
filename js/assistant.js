@@ -11,7 +11,14 @@
 	'use strict';
 
 	const $ = id => document.getElementById(id);
-	const API = window.NodeSim;
+	//Resolved on use: if a stale cached app.js without the API is running, explain instead of crashing
+	const API = new Proxy({}, {
+		get(_, key) {
+			const api = window.NodeSim;
+			if (!api) throw new Error('il simulatore non è aggiornato: ricarica la pagina (Ctrl+Maiusc+R, o svuota la cache)');
+			return api[key];
+		}
+	});
 	const logEl = $('chat-log'), form = $('chat-form'), input = $('chat-input');
 	const sendBtn = $('chat-send'), stopBtn = $('chat-stop'), modeEl = $('chat-mode');
 	const hintEl = $('chat-hint'), examplesEl = $('chat-examples');
@@ -310,7 +317,9 @@
 		if (unknown.length) reply += (reply ? '\n\n' : '') + 'Non ho capito: "' + unknown.join('", "') + '". Scrivi **aiuto** per l\'elenco dei comandi.';
 		if (!reply) reply = out.some(o => o.action && !o.failed)
 			? 'Fatto. Gli effetti compaiono nel grafo in tempo reale e nel pannello "Cosa è successo"; scrivi **avanza 2 minuti** per saltare avanti.'
-			: 'Non ho capito. Scrivi **aiuto** per l\'elenco dei comandi.';
+			: out.some(o => o.failed)
+				? 'Non sono riuscito ad applicare il comando: il motivo è indicato sopra.'
+				: 'Non ho capito. Scrivi **aiuto** per l\'elenco dei comandi.';
 		bubble.set(reply, true);
 	}
 
