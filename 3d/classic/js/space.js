@@ -14,7 +14,6 @@
 	const T = global.THREE;
 	const UP = new T.Color('#3ee08f'), DOWN = new T.Color('#ff5b6b'), NEUTRAL = new T.Color('#8fdcff');
 	const HOLO = new T.Color('#5fe3ff');
-		const OFF = new T.Color('#56606a');
 	const CAT_COLORS = { vent: '#4fd4ef', pat: '#d2bb8c', mech: '#a88cff', gas: '#4be0a0', hemo: '#ff6b82', o2: '#ffb14a' };
 	const BANDS = ['Impostazioni · Paziente', 'Meccanica respiratoria', 'Volumi · Scambi gassosi', 'Circolo polmonare · Cuore dx', 'Emodinamica sistemica', 'Trasporto di O₂ · Metabolismo'];
 	const BAND_GAP = 10.4, ROW_GAP = 3.3, FLOOR_Y = -2.2, NODE_Y = 1.2;
@@ -162,7 +161,6 @@
 			this.time = 0;
 			this.lastInteraction = 0;
 			this.statsEl = document.getElementById('hud-stats');
-						this.off = new Set();
 			this.reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 			this.renderer = new T.WebGLRenderer({ antialias: true, alpha: false });
@@ -329,9 +327,8 @@
 
 				const label = document.createElement('div');
 				label.className = 'lbl';
-				label.innerHTML = '<span class="lbl-name"></span><span class="lbl-val"></span><span class="lbl-f"></span>';
-								label.querySelector('.lbl-name').textContent = n.label;
-								label.querySelector('.lbl-f').textContent = n.simple || '';
+				label.innerHTML = '<span class="lbl-name"></span><span class="lbl-val"></span>';
+				label.querySelector('.lbl-name').textContent = n.label;
 				label.addEventListener('click', () => this.select(n.id, true));
 				this.labelsLayer.appendChild(label);
 
@@ -339,7 +336,7 @@
 					n, pos: p, group: g, core, shell, ticks, arcs, halo, brackets, stem, spot, label, base,
 					valEl: label.querySelector('.lbl-val'),
 					spin: 0.4 + Math.random() * 0.5, phase: Math.random() * 6.28,
-					pulse: 0, trend: 0, activity: 0, last: undefined, offK: 0
+					pulse: 0, trend: 0, activity: 0, last: undefined
 				};
 			});
 		}
@@ -357,7 +354,7 @@
 				const baseColor = new T.Color(sign === '-' ? '#7a4a60' : sign === '+' ? '#2d7890' : '#6a6a45');
 				const line = new T.Line(geo, new T.LineBasicMaterial(additive({ color: baseColor.clone(), opacity: 0.35 })));
 				this.scene.add(line);
-				this.edges.push({ src, dst: n.id, sign, curve, line, baseColor, heat: 0, heatColor: NEUTRAL.clone(), lastEmit: 0, live: 1 });
+				this.edges.push({ src, dst: n.id, sign, curve, line, baseColor, heat: 0, heatColor: NEUTRAL.clone(), lastEmit: 0 });
 			}));
 		}
 
@@ -453,32 +450,6 @@
 			w.m.visible = true;
 		}
 
-		/*
-		 * Switched-off nodes turn grey and stop spinning; their links flash grey and fade out, and
-		 * no pulse travels through them. Switching back on grows the links again.
-		 */
-		setOff(ids) {
-			const next = new Set(ids);
-			for (const id in this.nodes) {
-				const was = this.off.has(id), now = next.has(id);
-				if (was === now) continue;
-				const x = this.nodes[id];
-				x.label.classList.toggle('off', now);
-				this.wave(id, now ? OFF : HOLO);
-				this.wave(id, now ? OFF : HOLO);
-				x.pulse = 1;
-				x.pulseColor = now ? OFF : HOLO;
-				this.edges.forEach(e => {
-					if (e.src !== id && e.dst !== id) return;
-					e.heat = 1;
-					e.heatColor.copy(now ? OFF : HOLO);
-				});
-			}
-			this.off = next;
-		}
-
-		isCut(e) { return this.off.has(e.src) || this.off.has(e.dst); }
-
 		//Wave that follows the causal graph from an edited node: green pushes up, red pushes down
 		cascade(startId, direction) {
 			const seen = { [startId]: direction };
@@ -488,7 +459,7 @@
 			for (let depth = 0; depth < 6 && frontier.length; depth++) {
 				const next = [];
 				frontier.forEach(([id, dir]) => {
-					this.edges.filter(e => e.src === id && !this.isCut(e)).forEach(e => {
+					this.edges.filter(e => e.src === id).forEach(e => {
 						const out = e.sign === '+' ? dir : e.sign === '-' ? -dir : 0;
 						const delay = depth * 0.42;
 						const color = out > 0 ? UP : out < 0 ? DOWN : NEUTRAL;
@@ -557,9 +528,7 @@
 			//continuous flow along links whose source is changing
 			let flowing = 0;
 			this.edges.forEach(e => {
-				const cut = this.isCut(e);
-				e.live += ((cut ? 0 : 1) - e.live) * Math.min(1, dt * (cut ? 2.2 : 3));
-				const a = cut ? 0 : this.nodes[e.src].activity;
+				const a = this.nodes[e.src].activity;
 				const mag = Math.abs(a);
 				if (mag > 0.002 && t - e.lastEmit > Math.max(0.12, 0.6 - mag * 25)) {
 					e.lastEmit = t;
@@ -573,8 +542,7 @@
 				const sel = this.selected && (e.src === this.selected || e.dst === this.selected);
 				const dim = this.selected && !sel ? 0.45 : 1;
 				e.line.material.color.copy(sel ? HOLO : e.baseColor).lerp(e.heatColor, e.heat);
-				e.line.material.opacity = (sel ? 0.95 : (0.3 + e.heat * 0.65) * dim) * e.live;
-				e.line.visible = e.live > 0.01;
+				e.line.material.opacity = sel ? 0.95 : (0.3 + e.heat * 0.65) * dim;
 			});
 
 			//particles
@@ -605,17 +573,14 @@
 			for (const id in this.nodes) {
 				const x = this.nodes[id];
 				const tr = x.trend, sel = id === this.selected, hov = id === this.hover;
-				const isOff = this.off.has(id);
-				x.offK += ((isOff ? 1 : 0) - x.offK) * Math.min(1, dt * 3);
-				tmp.copy(x.base).lerp(tr > 0 ? UP : DOWN, isOff ? 0 : Math.min(1, Math.abs(tr)) * 0.85);
+				tmp.copy(x.base).lerp(tr > 0 ? UP : DOWN, Math.min(1, Math.abs(tr)) * 0.85);
 				if (x.pulse > 0.05 && x.pulseColor) tmp.lerp(x.pulseColor, x.pulse * 0.7);
-				tmp.lerp(OFF, x.offK);
 				x.pulse = Math.max(0, x.pulse - dt * 1.4);
 				x.core.material.color.copy(tmp).lerp(white, 0.25 + x.pulse * 0.4);
 				[x.shell, x.ticks, x.arcs, x.halo, x.stem, x.spot].forEach(o => o.material.color.copy(tmp));
 
-				const act = Math.min(1, (isOff ? 0 : Math.abs(tr)) + x.pulse);
-				const spin = x.spin * (1 + act * 3) * motion * (1 - 0.9 * x.offK);
+				const act = Math.min(1, Math.abs(tr) + x.pulse);
+				const spin = x.spin * (1 + act * 3) * motion;
 				x.shell.rotation.y += dt * spin;
 				x.shell.rotation.x += dt * spin * 0.4;
 				x.ticks.rotation.z += dt * spin * 0.35;
@@ -628,9 +593,9 @@
 				x.arcs.scale.setScalar(1 + x.pulse * 0.2);
 				x.ticks.material.opacity = 0.35 + act * 0.35 + (sel || hov ? 0.3 : 0);
 				x.arcs.material.opacity = 0.4 + act * 0.4 + (sel || hov ? 0.3 : 0);
-				x.halo.material.opacity = (0.28 + Math.abs(tr) * 0.3 + x.pulse * 0.5) * (1 - 0.7 * x.offK);
+				x.halo.material.opacity = 0.28 + Math.abs(tr) * 0.3 + x.pulse * 0.5;
 				x.halo.scale.setScalar(2.4 + Math.abs(tr) * 1.4 + x.pulse * 2.6);
-				x.stem.material.opacity = (0.2 + act * 0.4 + (sel ? 0.4 : 0)) * (1 - 0.6 * x.offK);
+				x.stem.material.opacity = 0.2 + act * 0.4 + (sel ? 0.4 : 0);
 				x.spot.material.opacity = 0.25 + act * 0.4 + (sel ? 0.4 : 0);
 
 				x.brackets.material.opacity = sel ? 0.9 : hov ? 0.45 : 0;

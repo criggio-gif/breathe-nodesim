@@ -6,8 +6,6 @@
 
 	const { PhysiologyModel, DEFAULT_PATIENT, DEFAULT_VENTILATOR } = window.BreathePhysiology;
 	const C = window.BreatheNodes;
-		const { VentConsole, BreathPlayer } = window.BreatheConsole;
-		const FREEZABLE = new Set(window.BreathePhysiology.FREEZABLE);
 	const $ = id => document.getElementById(id);
 	const clone = o => JSON.parse(JSON.stringify(o));
 
@@ -127,8 +125,6 @@
 		$('card-cat').textContent = C.CATEGORIES[n.cat].label;
 		$('card-title').textContent = n.labelFn ? n.labelFn(out) : n.label;
 		$('card-desc').textContent = n.desc;
-		$('card-simple').textContent = n.simple || '';
-		$('card-power').hidden = !FREEZABLE.has(id);
 
 		const edit = $('card-edit');
 		edit.innerHTML = '';
@@ -177,15 +173,10 @@
 	function updateCard() {
 		if (!selected) return;
 		const n = C.byId[selected];
-		const off = selected in model.frozen;
-		$('card').classList.toggle('node-off', off);
-		$('card-power').textContent = off ? '⏻ Riattiva nodo' : '⏻ Disattiva nodo';
-		$('card-power').setAttribute('aria-pressed', off);
-		$('card-power').classList.toggle('is-off', off);
 		const v = C.nodeValue(n, out);
 		$('card-val').textContent = fmtNode(v, n);
 		$('card-unit').textContent = n.unitFn ? n.unitFn(out) : n.unit;
-		$('card-sub').textContent = off ? 'Nodo disattivato: valore fisso, non risente dei nodi a monte' : n.subFn ? n.subFn(out) : '';
+		$('card-sub').textContent = n.subFn ? n.subFn(out) : '';
 		const delta = $('card-delta');
 		if (ref) {
 			const dv = v - C.nodeValue(n, ref);
@@ -204,21 +195,9 @@
 		{ id: 'fio2', label: 'FiO₂', val: o => o.fio2 * 100, d: 0, unit: '%' },
 		{ id: 'ti', label: 'Ti', val: o => o.ti, d: 1, unit: 's' }
 	];
-	//Measured values as on an ICU ventilator: Pplat when a plateau exists or after an inspiratory
-	//hold; PEEPi and Cstat only after the hold maneuvers (valid for 3 minutes)
-	const HOLD_VALID = 180;
-	const holdRes = type => {
-		const r = monitor && monitor.results[type];
-		return r && monitor.player.simTime - r.at < HOLD_VALID ? r : null;
-	};
-	const autoPlat = () => { const b = monitor && monitor.player.seg ? monitor.player.seg.b : null; return b && b.autoPlat != null ? b.autoPlat : null; };
 	const MEAS = [
-		['Ppicco', o => o.ppeak.toFixed(0)],
-		['Pplat', () => { const a = autoPlat(); if (a != null) return a.toFixed(0); const r = holdRes('insp'); return r ? r.pplat.toFixed(0) : '—'; }],
-		['Pmedia', o => o.mpaw.toFixed(0)],
-		['PEEPi', () => { const r = holdRes('exp'); return r ? r.peepi.toFixed(1) : '—'; }],
-		['Cstat', () => { const r = holdRes('insp'); return r && r.cstat ? r.cstat.toFixed(0) : '—'; }],
-		['VTe', o => o.vt.toFixed(0)]
+		['Ppicco', o => o.ppeak, 0, 'cmH₂O'], ['Pplat', o => o.pplat, 0, 'cmH₂O'], ['PEEP tot', o => o.peepTot, 1, 'cmH₂O'],
+		['VT', o => o.vt, 0, 'mL'], ['FR', o => o.rr, 0, '/min'], ['ΔP', o => o.dp, 0, 'cmH₂O']
 	];
 	const VITALS = [
 		['FC', o => o.hr.toFixed(0), 'bpm', '#46d68c', 'hr'], ['PA', o => o.sbp.toFixed(0) + '/' + o.dbp.toFixed(0), o => '(' + o.map.toFixed(0) + ') mmHg', '#ff5d62', 'map'],
@@ -290,9 +269,7 @@
 			e.v.textContent = t.val(out).toFixed(t.d);
 			e.u.textContent = typeof t.unit === 'function' ? t.unit(out) : t.unit;
 		});
-		measEls.forEach(e => { e.v.textContent = e.m[1](out); });
-				$('vent-mode-label').textContent = out.mode === 'SI' ? 'RECLUTAMENTO' : out.mode === 'CPAP' ? 'CPAP/ASB' : out.mode + (model.ventilator.AssistedMode === 0 ? '-AC' : '-CMV');
-				syncOff();
+		measEls.forEach(e => { e.v.textContent = e.m[1](out).toFixed(e.m[2]); });
 		vitalEls.forEach(e => {
 			e.v.textContent = e.vt[1](out);
 			e.u.textContent = typeof e.vt[2] === 'function' ? e.vt[2](out) : e.vt[2];
@@ -351,10 +328,7 @@
 			return;
 		}
 		space = new window.Space3D($('space-canvas'), $('labels'), C, openCard);
-		monitor = new VentConsole($('monitor'), { abp: true, loop: $('loop'), window: 8 });
-		wireConsole();
-		wireView();
-		$('card-power').addEventListener('click', () => { if (selected) toggleNode(selected); });
+		monitor = new window.BreatheMonitor.Monitor($('monitor'));
 		const sel = $('scenario');
 		PRESETS.forEach(p => sel.append(new Option(p.label, p.id)));
 		sel.addEventListener('change', () => { loadPreset(sel.value); toast('Scenario: ' + sel.options[sel.selectedIndex].text); });
@@ -392,138 +366,6 @@
 		requestAnimationFrame(frame);
 	}
 
-	/* ------------------------------------------------------------ switched-off nodes, view, settings */
-
-	function toggleNode(id) {
-		if (!FREEZABLE.has(id)) return false;
-		const n = C.byId[id];
-		const wasOff = id in model.frozen;
-		model.setNodeEnabled(id, wasOff);
-		const v = C.nodeValue(n, out);
-		toast(wasOff ? 'Nodo riattivato: ' + n.label : 'Nodo disattivato: ' + n.label + ' fisso a ' + fmtNode(v, n) + ' ' + (n.unitFn ? n.unitFn(out) : n.unit));
-		syncOff();
-		updateCard();
-		return true;
-	}
-
-	function syncOff() {
-		const ids = Object.keys(model.frozen);
-		space.setOff(ids);
-		$('btn-all-on').disabled = !ids.length;
-		$('btn-all-on').textContent = ids.length ? 'Riattiva tutti i nodi (' + ids.length + ')' : 'Riattiva tutti i nodi';
-	}
-
-	const PREFS_KEY = 'nodesim3d-prefs';
-	let prefs = { view: 'full', formulas: false };
-	try { prefs = Object.assign(prefs, JSON.parse(localStorage.getItem(PREFS_KEY) || '{}')); } catch (e) { /* storage unavailable */ }
-	const savePrefs = () => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) { /* storage unavailable */ } };
-
-	function setView(v) {
-		prefs.view = v === 'console' ? 'console' : 'full';
-		savePrefs();
-		const consoleMode = prefs.view === 'console';
-		document.querySelector('.shell').classList.toggle('console-mode', consoleMode);
-		//the top bar (scenario, time, view, settings) follows the visible area
-		const hud = document.querySelector('.hud-top');
-		if (consoleMode) $('side').prepend(hud); else $('space').append(hud);
-		document.querySelectorAll('#view-mode button').forEach(b => {
-			const on = b.dataset.view === prefs.view;
-			b.classList.toggle('on', on);
-			b.setAttribute('aria-checked', on);
-		});
-		requestAnimationFrame(() => space.resize());
-	}
-
-	function wireView() {
-		document.querySelectorAll('#view-mode button').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
-		const menu = $('settings-menu'), btn = $('btn-settings');
-		const close = () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
-		btn.addEventListener('click', ev => { ev.stopPropagation(); menu.hidden = !menu.hidden; btn.setAttribute('aria-expanded', String(!menu.hidden)); });
-		document.addEventListener('click', ev => { if (!menu.hidden && !menu.contains(ev.target)) close(); });
-		document.addEventListener('keydown', ev => { if (ev.key === 'Escape') close(); });
-		$('set-formulas').checked = prefs.formulas;
-		document.body.classList.toggle('show-formulas', prefs.formulas);
-		$('set-formulas').addEventListener('change', ev => { prefs.formulas = ev.target.checked; savePrefs(); document.body.classList.toggle('show-formulas', prefs.formulas); });
-		$('btn-all-on').addEventListener('click', () => {
-			const ids = Object.keys(model.frozen);
-			ids.forEach(id => model.setNodeEnabled(id, true));
-			if (ids.length) toast('Riattivati ' + ids.length + ' nodi');
-			syncOff();
-			updateCard();
-		});
-		setView(prefs.view);
-	}
-
-	/* ------------------------------------------------------------ ventilator console */
-
-	function renderHoldResults() {
-		const ri = holdRes('insp'), re = holdRes('exp');
-		const row = (l, v, u) => '<div class="hr-row"><span>' + l + '</span><b>' + v + '</b><i>' + u + '</i></div>';
-		let html = '<h3>Manovre di pausa</h3>';
-		if (!ri && !re) html += '<p class="hint">Premi <b>Pausa insp.</b> o <b>Pausa esp.</b>: i valori misurati compaiono qui.</p>';
-		if (ri) html += row('Pplat', ri.pplat.toFixed(1), 'cmH₂O') + row('ΔP', ri.dp.toFixed(1), 'cmH₂O') +
-			row('Cstat', ri.cstat ? ri.cstat.toFixed(0) : '—', 'mL/cmH₂O') + row('R', ri.raw ? ri.raw.toFixed(1) : '—', 'cmH₂O/L/s');
-		if (re) html += row('PEEP tot', re.peepTot.toFixed(1), 'cmH₂O') + row('PEEPi', re.peepi.toFixed(1), 'cmH₂O') + row('V intrappolato', re.vtrap.toFixed(0), 'mL');
-		$('hold-results').innerHTML = html;
-	}
-
-	const holdLabel = type => type === 'insp' ? 'Pausa inspiratoria' : 'Pausa espiratoria';
-
-	function startHold(type, dur) {
-		if (!monitor.requestHold(type, dur)) { $('hold-status').textContent = 'Nessun respiro da mettere in pausa'; return false; }
-		$(type === 'insp' ? 'hold-insp' : 'hold-exp').classList.add('armed');
-		$('hold-status').textContent = holdLabel(type) + ': in attesa della fine ' + (type === 'insp' ? 'dell’inspirazione' : 'dell’espirazione') + '…';
-		$('hold-status').className = 'vent-status busy';
-		return true;
-	}
-
-	function wireConsole() {
-		const status = $('hold-status');
-		monitor.onHoldStart = type => { status.textContent = holdLabel(type) + ' in corso: valvole chiuse'; status.className = 'vent-status busy'; };
-		monitor.onHoldEnd = (type, r) => {
-			status.textContent = type === 'insp'
-				? 'Pplat ' + r.pplat.toFixed(1) + ' · ΔP ' + r.dp.toFixed(1) + ' cmH₂O' + (r.cstat ? ' · Cstat ' + r.cstat.toFixed(0) : '') + (r.raw ? ' · R ' + r.raw.toFixed(1) : '')
-				: 'PEEP tot ' + r.peepTot.toFixed(1) + ' · PEEPi ' + r.peepi.toFixed(1) + ' cmH₂O · Vtrap ' + r.vtrap.toFixed(0) + ' mL';
-			status.className = 'vent-status done';
-			document.querySelectorAll('.vkey').forEach(b => b.classList.remove('armed'));
-			renderHoldResults();
-			toast(holdLabel(type) + ' completata');
-			space.cascade(type === 'insp' ? 'pplat' : 'autopeep', 0);
-		};
-		[['hold-insp', 'insp'], ['hold-exp', 'exp']].forEach(([id, type]) => {
-			const b = $(id);
-			let pressed = false;
-			b.addEventListener('pointerdown', ev => { if (ev.button !== 0) return; pressed = true; startHold(type, 15); });
-			const up = () => { if (pressed) { pressed = false; monitor.releaseHold(type); } };
-			b.addEventListener('pointerup', up);
-			b.addEventListener('pointerleave', up);
-			b.addEventListener('click', ev => { if (ev.detail === 0) startHold(type); });
-		});
-		$('freeze').addEventListener('click', () => {
-			const on = monitor.toggleFreeze();
-			$('freeze').setAttribute('aria-pressed', on);
-			$('freeze').classList.toggle('on', on);
-		});
-		renderHoldResults();
-	}
-
-	function measureHold(type) {
-		const p = new BreathPlayer();
-		let res = null;
-		p.onHoldEnd = (t, r) => { res = r; };
-		p.advance(0.001, out);
-		p.requestHold(type, type === 'insp' ? 2 : 3);
-		for (let t = 0; t < 40 && !res; t += 0.02) p.advance(0.02, out);
-		return res;
-	}
-
-	window.NodeSim3D = {
-		get model() { return model; }, get out() { return out; },
-		select: id => space.select(id, true),
-		edit: (id, v) => applyEdit(id, editFor(id), v),
-		setNodeEnabled(id, enabled) { if ((id in model.frozen) === !enabled) return true; return toggleNode(id); },
-		holdManeuver(type) { startHold(type); return measureHold(type); },
-		setView
-	};
+	window.NodeSim3D = { get model() { return model; }, get out() { return out; }, select: id => space.select(id, true), edit: (id, v) => applyEdit(id, editFor(id), v) };
 	init();
 })();

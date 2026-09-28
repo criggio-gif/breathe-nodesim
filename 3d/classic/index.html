@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="css/style.css?v=4">
+<link rel="stylesheet" href="css/style.css?v=3">
 </head>
 <body>
 <div class="shell">
@@ -21,7 +21,7 @@
 				<span class="brand-mark" aria-hidden="true"></span>
 				<div>
 					<h1>NodeSim <span>3D</span></h1>
-					<p>Il paziente ventilato come una rete di nodi fisiologici</p>
+					<p>Versione classica (backup) · <a href="../" style="color:#4fd4ef">versione attuale</a></p>
 				</div>
 			</div>
 			<div class="hud-controls">
@@ -34,20 +34,7 @@
 					<button data-speed="20" role="radio" aria-checked="false">20&times;</button>
 				</div>
 				<output class="clock" id="clock">00:00</output>
-								<div class="seg" id="view-mode" role="radiogroup" aria-label="Vista">
-									<button data-view="full" class="on" role="radio" aria-checked="true" title="Nodi 3D e console">Rete + console</button>
-									<button data-view="console" role="radio" aria-checked="false" title="Nasconde i nodi: solo ventilatore e monitor">Solo console</button>
-								</div>
-								<div class="settings">
-									<button class="hud-btn" id="btn-settings" aria-haspopup="true" aria-expanded="false" aria-controls="settings-menu">&#9881; Impostazioni</button>
-									<div class="settings-menu" id="settings-menu" hidden>
-										<label class="toggle"><input type="checkbox" id="set-formulas"><span>Formule semplificate sui nodi</span></label>
-										<p class="hint">Un nodo si disattiva dalla sua scheda (&#9211; Disattiva nodo): resta fermo al suo valore, diventa grigio e i suoi collegamenti si spengono.</p>
-										<button class="act" id="btn-all-on" disabled>Riattiva tutti i nodi</button>
-										<a class="menu-link" href="classic/">Versione classica (backup)</a>
-									</div>
-								</div>
-							</div>
+			</div>
 		</header>
 
 		<div class="legend" aria-hidden="true">
@@ -62,9 +49,7 @@
 			<h2 id="card-title"></h2>
 			<div class="card-value"><output id="card-val"></output><span id="card-unit"></span><span class="card-delta" id="card-delta"></span></div>
 			<p class="card-sub" id="card-sub"></p>
-						<p class="card-simple" id="card-simple"></p>
-						<button type="button" class="card-power" id="card-power" aria-pressed="false"></button>
-						<div class="card-edit" id="card-edit"></div>
+			<div class="card-edit" id="card-edit"></div>
 			<p class="card-desc" id="card-desc"></p>
 			<div class="card-links" id="card-links"></div>
 		</section>
@@ -73,7 +58,7 @@
 		<div class="toast" id="toast" hidden></div>
 	</main>
 
-	<aside class="side" id="side" aria-label="Monitor e ventilatore">
+	<aside class="side" aria-label="Monitor e ventilatore">
 		<section class="vent">
 			<div class="side-head">
 				<h2>Ventilatore</h2>
@@ -88,23 +73,9 @@
 		</section>
 
 		<section class="monitor">
-					<div class="vent-head">
-						<span class="vent-mode-label" id="vent-mode-label">VC</span>
-						<div class="vent-keys">
-							<button class="vkey" id="hold-insp" title="Clic: pausa di 2 s alla fine della prossima inspirazione (Pplat, compliance, resistenze). Tieni premuto per prolungarla, max 15 s.">Pausa insp.</button>
-							<button class="vkey" id="hold-exp" title="Clic: pausa di 3 s alla fine della prossima espirazione (PEEP totale, auto-PEEP). Tieni premuto per prolungarla, max 15 s.">Pausa esp.</button>
-							<button class="vkey" id="freeze" aria-pressed="false" title="Congela le curve">Congela</button>
-						</div>
-					</div>
-					<p class="vent-status" id="hold-status" aria-live="polite"></p>
-					<div class="monitor-screen"><canvas id="monitor" aria-label="Curve di pressione, flusso, volume e pressione arteriosa"></canvas></div>
-					<div class="vitals" id="vitals"></div>
-				</section>
-
-				<section class="loop-wrap">
-					<canvas id="loop" aria-label="Loop pressione-volume"></canvas>
-					<div class="hold-results" id="hold-results"></div>
-				</section>
+			<div class="monitor-screen"><canvas id="monitor" aria-label="Curve di pressione, flusso e pressione arteriosa"></canvas></div>
+			<div class="vitals" id="vitals"></div>
+		</section>
 
 		<section class="actions">
 			<h2>Manovre</h2>
@@ -120,10 +91,10 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-<script src="js/physiology.js?v=4"></script>
-<script src="js/nodes.js?v=4"></script>
-<script src="js/console.js?v=4"></script>
-<script src="js/space.js?v=4"></script>
-<script src="js/app.js?v=4"></script>
+<script src="js/physiology.js?v=3"></script>
+<script src="js/nodes.js?v=3"></script>
+<script src="js/monitor.js?v=3"></script>
+<script src="js/space.js?v=3"></script>
+<script src="js/app.js?v=3"></script>
 </body>
 </html>
