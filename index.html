@@ -135,6 +135,23 @@
 	</main>
 
 	<aside class="inspector" aria-label="Dettagli">
+		<section class="panel chat" id="chat-panel" aria-label="Assistente">
+			<div class="chat-head">
+				<h2>Assistente</h2>
+				<span class="chat-mode local" id="chat-mode">comandi semplici</span>
+			</div>
+			<div class="chat-log" id="chat-log" aria-live="polite"></div>
+			<div class="chips chat-examples" id="chat-examples"></div>
+			<form class="chat-form" id="chat-form">
+				<label class="sr-only" for="chat-input">Messaggio per l'assistente</label>
+				<textarea id="chat-input" rows="2"></textarea>
+				<div class="chat-actions">
+					<button type="button" class="btn btn-small" id="chat-stop" hidden>Interrompi</button>
+					<button type="submit" class="btn btn-primary btn-small" id="chat-send">Invia</button>
+				</div>
+			</form>
+			<p class="hint" id="chat-hint"></p>
+		</section>
 		<section class="panel" id="node-panel">
 			<div id="node-empty">
 				<h2>Come si legge</h2>
@@ -156,5 +173,6 @@
 <script src="js/graph.js"></script>
 <script src="js/monitor.js"></script>
 <script src="js/app.js"></script>
+<script src="js/assistant.js"></script>
 </body>
 </html>

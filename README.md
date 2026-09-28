@@ -42,6 +42,9 @@ node test/physiology.test.js
 - **Monitor** con curve di pressione, flusso e pressione arteriosa (con variazione respiratoria), parametri numerici e trend con i marcatori degli interventi.
 - **Cosa è successo**: dopo ogni intervento il pannello elenca le variabili cambiate, prima → dopo, e per ciascuna le cause a monte coerenti con il grafo.
 - Tempo simulato 1×, 5×, 20×, 60×.
+- **Assistente**: pannello in cui descrivere a parole cosa succede o cosa si fa.
+  - Nella versione aperta su **claude.ai** risponde Claude: capisce frasi libere ("lo specializzando fa un reclutamento a 40 cmH₂O per 30 secondi"), applica le azioni al simulatore tramite gli strumenti di `window.NodeSim`, fa trascorrere il tempo e spiega gli effetti con i valori del modello. Usa l'utilizzo di Claude di chi lo apre, che la prima volta deve dare il permesso.
+  - Altrove (GitHub Pages, file locale) funziona come interprete di comandi in italiano, senza IA: `PEEP 15`, `FiO2 60%`, `reclutamento 40 per 30 s`, `bolo 500 mL`, `avanza 2 minuti`, `ARDS grave`, `stato`, `aiuto`.
 
 ## Modello
 
@@ -67,6 +70,7 @@ breathe-nodesim/
 ├── js/nodes.js        catalogo dei nodi e delle relazioni
 ├── js/graph.js        grafo SVG (pan, zoom, trascinamento, propagazione)
 ├── js/monitor.js      monitor a curve e trend
-├── js/app.js          controlli, manovre, narrazione, loop di simulazione
+├── js/app.js          controlli, manovre, narrazione, loop di simulazione, API window.NodeSim
+├── js/assistant.js    pannello Assistente (Claude su claude.ai, comandi semplici altrove)
 └── test/physiology.test.js
 ```

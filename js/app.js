@@ -426,9 +426,10 @@
 		if (!silent) logEvent(m.name + ' interrotta');
 	}
 
-	function sustainedInflation() {
-		const p = Math.min(50, Math.max(20, +$('si-p').value || 40));
-		const t = Math.min(60, Math.max(10, +$('si-t').value || 40));
+	function sustainedInflation(pressure, seconds) {
+		const p = Math.round(Math.min(50, Math.max(20, +(pressure || $('si-p').value) || 40)));
+		const t = Math.round(Math.min(60, Math.max(10, +(seconds || $('si-t').value) || 40)));
+		$('si-p').value = p; $('si-t').value = t;
 		runManeuver({
 			name: 'Insufflazione sostenuta',
 			steps: [{ label: 'CPAP ' + p + ' cmH₂O', dur: t, start: () => model.startSustainedInflation(p, t + 1), end: () => model.stopOverride() }],
@@ -743,26 +744,16 @@
 			chips.appendChild(b);
 		});
 
-		$('m-si').addEventListener('click', sustainedInflation);
+		$('m-si').addEventListener('click', () => sustainedInflation());
 		$('m-staircase').addEventListener('click', () => {
 			staircase();
 			if (speed < 20) setSpeed(20);
 		});
-		$('m-fluid').addEventListener('click', () => {
-			model.fluidBolus(500, 300);
-			logEvent('Bolo di fluidi 500 mL in 5 min', 'Aumenta il volume stressato e quindi la pressione media di riempimento: se il paziente è sulla parte ripida della curva di Starling (PPV alta) la gittata sale.');
-		});
-		$('m-bleed').addEventListener('click', () => {
-			model.hemorrhage(500);
-			logEvent('Emorragia acuta 500 mL');
-		});
+		$('m-fluid').addEventListener('click', () => fluidBolus(500));
+		$('m-bleed').addEventListener('click', () => hemorrhage(500));
 		$('ms-stop').addEventListener('click', () => stopManeuver(false));
 
-		$('btn-play').addEventListener('click', () => {
-			running = !running;
-			$('btn-play').innerHTML = running ? '&#10074;&#10074;' : '&#9654;';
-			$('btn-play').setAttribute('aria-label', running ? 'Pausa' : 'Riprendi');
-		});
+		$('btn-play').addEventListener('click', () => setRunning(!running));
 		document.querySelectorAll('#speed button').forEach(b => b.addEventListener('click', () => setSpeed(+b.dataset.speed)));
 		$('btn-reset').addEventListener('click', () => {
 			stopManeuver(true);
@@ -791,6 +782,201 @@
 			b.setAttribute('aria-checked', on);
 		});
 	}
+
+	function setRunning(on) {
+		running = !!on;
+		$('btn-play').innerHTML = running ? '&#10074;&#10074;' : '&#9654;';
+		$('btn-play').setAttribute('aria-label', running ? 'Pausa' : 'Riprendi');
+	}
+
+	function fluidBolus(mL) {
+		mL = Math.round(Math.min(3000, Math.max(50, +mL || 500)));
+		const minutes = Math.max(1, Math.round(mL / 100));
+		model.fluidBolus(mL, minutes * 60);
+		logEvent('Bolo di fluidi ' + mL + ' mL in ' + minutes + ' min', 'Aumenta il volume stressato e quindi la pressione media di riempimento: se il paziente è sulla parte ripida della curva di Starling (PPV alta) la gittata sale.');
+		return { mL, minutes };
+	}
+
+	function hemorrhage(mL) {
+		mL = Math.round(Math.min(3000, Math.max(50, +mL || 500)));
+		model.hemorrhage(mL);
+		logEvent('Emorragia acuta ' + mL + ' mL');
+		return { mL };
+	}
+
+	/* ------------------------------------------------------------ public API (used by the assistant) */
+
+	const KEY_VALUES = ['map', 'sbp', 'dbp', 'hr', 'co', 'sv', 'rap', 'pmsf', 'mpap', 'ppv', 'spo2', 'pao2', 'paco2', 'etco2', 'pf', 'ph',
+		'lactate', 'do2', 'svo2', 'peepTot', 'autoPeep', 'pplat', 'ppeak', 'dp', 'crs', 'aeration', 'overdist', 'shunt', 'vdvt',
+		'mpaw', 'pplMean', 'vt', 'rr', 'mp', 'strain'];
+	const EXTREMES = { map: 'min', co: 'min', spo2: 'min', hr: 'max', paco2: 'max', pplat: 'max', rap: 'max' };
+	const rnd = v => !isFinite(v) ? null : Math.abs(v) >= 100 ? Math.round(v) : Number(v.toFixed(2));
+
+	function keyValues(o) {
+		const r = {};
+		KEY_VALUES.forEach(k => { r[k] = rnd(o[k]); });
+		return r;
+	}
+
+	function describeState() {
+		const P = model.patient;
+		const actions = {};
+		for (const k in model.actions) if (model.actions[k] > 0) actions[k] = model.actions[k];
+		return {
+			simTime: fmtTime(out.t),
+			scenario: (PRESETS.find(p => p.id === presetId) || {}).label,
+			ventilator: clone(model.ventilator),
+			patient: { Sex: P.Sex, Age: P.Age, Weight: P.Weight, Height: P.Height, PBW: rnd(out.pbw), Volemia: P.Volemia, Sedation: P.Sedation },
+			conditions: clone(model.conditions),
+			actions,
+			maneuver: maneuver ? { name: maneuver.name, step: (maneuver.steps[maneuver.i] || {}).label, secondsLeft: Math.round(maneuver.total - maneuver.elapsed) } : null,
+			values: keyValues(out)
+		};
+	}
+
+	function effects(before, after, max) {
+		return analyze(before, after).filter(c => c.n.cat !== 'vent').slice(0, max || 16).map(c => ({
+			node: c.n.label,
+			before: Number(c.a.toFixed(c.n.dec)), after: Number(c.b.toFixed(c.n.dec)),
+			unit: c.n.unitFn ? c.n.unitFn(after) : c.n.unit,
+			causes: c.causes.map(x => x.n.label)
+		}));
+	}
+
+	//Run the model as fast as possible for the given simulated time (maneuvers keep running)
+	function advance(seconds) {
+		const total = Math.min(1800, Math.max(1, +seconds || 60));
+		const before = snapshot(out);
+		const ext = {};
+		for (const k in EXTREMES) ext[k] = out[k];
+		const h = 0.25;
+		for (let i = 0, n = Math.round(total / h); i < n; i++) {
+			out = model.step(h);
+			tickManeuver(h);
+			for (const k in EXTREMES) ext[k] = EXTREMES[k] === 'min' ? Math.min(ext[k], out[k]) : Math.max(ext[k], out[k]);
+			recAcc += h;
+			if (recAcc >= 1) { recAcc -= 1; recordHistory(); trends.record(out); }
+		}
+		updateUI();
+		renderEvents();
+		const extremes = {};
+		for (const k in EXTREMES) extremes[(EXTREMES[k] === 'min' ? 'min_' : 'max_') + k] = rnd(ext[k]);
+		return { advancedSeconds: total, simTime: fmtTime(out.t), changes: effects(before, snapshot(out)), extremesDuringInterval: extremes,
+			maneuverRunning: maneuver ? maneuver.name : null, values: keyValues(out) };
+	}
+
+	function clampField(spec, v) {
+		v = Number(v);
+		if (!isFinite(v)) return null;
+		return Math.min(spec.max, Math.max(spec.min, Number(v.toFixed(spec.dec))));
+	}
+
+	function setVentilatorApi(params) {
+		const clean = {};
+		if (params.mode !== undefined) {
+			const m = String(params.mode).toUpperCase();
+			if (m === 'VC' || m === 'PC' || m === 'CPAP') clean.mode = m;
+		}
+		if (params.AssistedMode !== undefined) clean.AssistedMode = String(params.AssistedMode).toUpperCase() === 'CMV' || +params.AssistedMode === 1 ? 1 : 0;
+		for (const k in VENT_FIELDS) {
+			if (params[k] === undefined || params[k] === null) continue;
+			let v = +params[k];
+			if (k === 'FractionInspiredOxygen' && v > 1) v = v / 100;
+			const c = clampField(VENT_FIELDS[k], v);
+			if (c !== null) clean[k] = c;
+		}
+		if (!Object.keys(clean).length) throw new Error('Nessun parametro del ventilatore valido');
+		//During a sustained inflation the new settings apply when it ends; the PEEP titration drives the ventilator itself
+		if (maneuver && maneuver.restore) throw new Error('È in corso la titolazione della PEEP: aspetta che finisca (advance) prima di cambiare il ventilatore');
+		commitVent(clean);
+		syncVentUI();
+		return { applied: clean, ventilator: clone(model.ventilator) };
+	}
+
+	function findCondition(name) {
+		const n = String(name || '').toLowerCase();
+		return CONDITIONS.find(c => c.name.toLowerCase() === n || c.label.toLowerCase() === n);
+	}
+
+	function setConditionApi(name, severity, remove) {
+		const c = findCondition(name);
+		if (!c) throw new Error('Condizione sconosciuta: ' + name + '. Disponibili: ' + CONDITIONS.map(x => x.name).join(', '));
+		if (remove || +severity === 0) {
+			model.setCondition(c.name, null);
+			logEvent(c.label + ' rimossa');
+		} else {
+			const cur = {};
+			c.params.forEach(p => {
+				const v = severity === undefined ? p.def : Math.min(p.max, Math.max(p.min, +severity));
+				p.keys.forEach(k => { cur[k] = v; });
+			});
+			model.setCondition(c.name, cur);
+			logEvent(c.label + ': ' + c.params.map(p => p.label.replace(/ \(.*\)/, '').toLowerCase() + ' ' + cur[p.keys[0]] + (p.unit ? ' ' + p.unit : '')).join(', '));
+		}
+		buildConditionFields();
+		return { conditions: clone(model.conditions) };
+	}
+
+	function setActionApi(name, severity) {
+		const n = String(name || '').toLowerCase();
+		const a = ACTIONS.find(x => x.name.toLowerCase() === n || x.label.toLowerCase() === n);
+		if (!a) throw new Error('Azione sconosciuta: ' + name + '. Disponibili: ' + ACTIONS.map(x => x.name).join(', '));
+		const v = Math.min(1, Math.max(0, +severity || 0));
+		model.setAction(a.name, v);
+		logEvent(a.label + ' ' + (v > 0 ? 'gravità ' + v.toFixed(2) : 'risolta'));
+		buildActionFields();
+		return { actions: clone(model.actions) };
+	}
+
+	function setPatientApi(params) {
+		const clean = {};
+		for (const k in PATIENT_FIELDS) {
+			if (params[k] === undefined || params[k] === null) continue;
+			const c = clampField(PATIENT_FIELDS[k], params[k]);
+			if (c !== null) clean[k] = c;
+		}
+		if (params.Sex !== undefined) clean.Sex = String(params.Sex).toUpperCase().startsWith('F') ? 'F' : 'M';
+		if (!Object.keys(clean).length) throw new Error('Nessun parametro del paziente valido');
+		const parts = Object.keys(clean).map(k => (PATIENT_FIELDS[k] ? PATIENT_FIELDS[k].label.replace(/ \(.*\)/, '') : 'Sesso') + ' ' + model.patient[k] + ' → ' + clean[k]);
+		model.setPatient(clean);
+		fieldUpdaters.forEach(u => u());
+		logEvent(parts.join(', '));
+		return { patient: clone(model.patient) };
+	}
+
+	window.NodeSim = {
+		state: describeState,
+		advance,
+		setVentilator: setVentilatorApi,
+		recruitment(pressure, seconds) {
+			sustainedInflation(pressure, seconds);
+			return { pressure: +$('si-p').value, seconds: +$('si-t').value, note: 'Manovra avviata; usa advance per far trascorrere il tempo' };
+		},
+		titration() {
+			staircase();
+			return { durationSeconds: maneuver ? Math.round(maneuver.total) : 0, note: 'Reclutamento a scalini + titolazione decrementale avviati' };
+		},
+		fluids: fluidBolus,
+		hemorrhage,
+		setCondition: setConditionApi,
+		setAction: setActionApi,
+		setPatient: setPatientApi,
+		loadScenario(id) {
+			const p = PRESETS.find(x => x.id === id || x.label.toLowerCase() === String(id).toLowerCase());
+			if (!p) throw new Error('Scenario sconosciuto: ' + id);
+			loadPreset(p.id);
+			return describeState();
+		},
+		effectsSinceLastEvent() {
+			const ev = events[0];
+			return ev ? { event: ev.text, secondsAgo: Math.round(out.t - ev.t), changes: effects(ev.snap, snapshot(out)) } : null;
+		},
+		isRunning: () => running,
+		setRunning,
+		scenarios: () => PRESETS.map(p => ({ id: p.id, label: p.label })),
+		conditions: () => CONDITIONS.map(c => ({ name: c.name, label: c.label })),
+		actions: () => ACTIONS.map(a => ({ name: a.name, label: a.label }))
+	};
 
 	function init() {
 		graph = new window.NodeGraph($('graph'), C, showNode);
