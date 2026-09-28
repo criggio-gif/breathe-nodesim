@@ -6,9 +6,7 @@
 
 	const { PhysiologyModel, DEFAULT_PATIENT, DEFAULT_VENTILATOR } = window.BreathePhysiology;
 	const C = window.BreatheNodes;
-	const { Trends, sparkline, cssVar } = window.BreatheMonitor;
-		const { VentConsole, BreathPlayer } = window.BreatheConsole;
-		const FREEZABLE = new Set(window.BreathePhysiology.FREEZABLE);
+	const { Monitor, Trends, sparkline, cssVar } = window.BreatheMonitor;
 	const $ = id => document.getElementById(id);
 	const clone = o => JSON.parse(JSON.stringify(o));
 
@@ -102,44 +100,20 @@
 		{ label: 'DO₂', keys: ['do2'], unit: 'mL/min', dec: 0, colors: ['--c-o2'], minSpan: 20 }
 	];
 
-	//Measured values as on an ICU ventilator: Pplat when a plateau exists (VC with pause) or after an
-		//inspiratory hold; PEEPi, Cstat and R only after the hold maneuvers (valid for 3 minutes)
-		const HOLD_VALID = 180;
-		const holdRes = type => {
-			const r = monitor && monitor.results[type];
-			return r && monitor.player.simTime - r.at < HOLD_VALID ? r : null;
-		};
-		const dash = '—';
-		const NUMERICS = [
-			{ label: 'Ppicco', color: '#f4c542', val: o => o.ppeak.toFixed(0), unit: 'cmH₂O' },
-			{ label: 'Pplat', color: '#f4c542', val: o => {
-				const b = monitor && monitor.player.seg ? monitor.player.seg.b : null;
-				if (b && b.autoPlat != null) return b.autoPlat.toFixed(0);
-				const r = holdRes('insp');
-				return r ? r.pplat.toFixed(0) : dash;
-			}, sub: o => {
-				const b = monitor && monitor.player.seg ? monitor.player.seg.b : null;
-				return b && b.autoPlat != null ? '' : holdRes('insp') ? '(pausa)' : 'Pausa insp.';
-			}, unit: 'cmH₂O' },
-			{ label: 'Pmedia', color: '#f4c542', val: o => o.mpaw.toFixed(0), unit: 'cmH₂O' },
-			{ label: 'PEEP', color: '#f4c542', val: o => o.x.peepE.toFixed(0), unit: 'cmH₂O' },
-			{ label: 'PEEPi', color: '#f4c542', val: () => { const r = holdRes('exp'); return r ? r.peepi.toFixed(1) : dash; },
-				sub: () => holdRes('exp') ? '' : 'Pausa esp.', unit: 'cmH₂O' },
-			{ label: 'Cstat', color: '#f4c542', val: () => { const r = holdRes('insp'); return r && r.cstat ? r.cstat.toFixed(0) : dash; },
-				sub: () => holdRes('insp') ? '' : 'Pausa insp.', unit: 'mL/cmH₂O' },
-			{ label: 'VTe', color: '#5cc8f0', val: o => o.vt.toFixed(0), unit: 'mL' },
-			{ label: 'VM', color: '#5cc8f0', val: o => (o.vt * o.rr / 1000).toFixed(1), unit: 'L/min' },
-			{ label: 'FR', color: '#5cc8f0', val: o => o.rr.toFixed(0), unit: '/min' },
-			{ label: 'FiO₂', color: '#5cc8f0', val: o => (o.fio2 * 100).toFixed(0), unit: '%' },
-			{ label: 'FC', color: '#46d68c', val: o => o.hr.toFixed(0), unit: 'bpm', vital: true },
-			{ label: 'ABP', color: '#ff5d62', val: o => o.sbp.toFixed(0) + '/' + o.dbp.toFixed(0), sub: o => '(' + o.map.toFixed(0) + ')', unit: 'mmHg', vital: true },
-			{ label: 'SpO₂', color: '#5cc8f0', val: o => o.spo2.toFixed(0), unit: '%', vital: true },
-			{ label: 'EtCO₂', color: '#f4c542', val: o => o.etco2.toFixed(0), unit: 'mmHg', vital: true },
-			{ label: 'GC', color: '#ff9f6b', val: o => o.co.toFixed(1), unit: 'L/min', vital: true },
-			{ label: 'PVC', color: '#b9a4ff', val: o => o.rap.toFixed(0), unit: 'mmHg', vital: true },
-			{ label: 'PAPm', color: '#e7e3d4', val: o => o.mpap.toFixed(0), unit: 'mmHg', vital: true },
-			{ label: 'PaO₂', color: '#5cc8f0', val: o => o.pao2.toFixed(0), unit: 'mmHg', vital: true }
-		];
+	const NUMERICS = [
+		{ label: 'FC', color: '#46d68c', val: o => o.hr.toFixed(0), unit: 'bpm' },
+		{ label: 'ABP', color: '#ff5d62', val: o => o.sbp.toFixed(0) + '/' + o.dbp.toFixed(0), sub: o => '(' + o.map.toFixed(0) + ')', unit: 'mmHg' },
+		{ label: 'SpO₂', color: '#5cc8f0', val: o => o.spo2.toFixed(0), unit: '%' },
+		{ label: 'EtCO₂', color: '#f4c542', val: o => o.etco2.toFixed(0), unit: 'mmHg' },
+		{ label: 'Ppicco', color: '#f4c542', val: o => o.ppeak.toFixed(0), unit: 'cmH₂O' },
+		{ label: 'Pplat', color: '#f4c542', val: o => o.pplat.toFixed(0), unit: 'cmH₂O' },
+		{ label: 'PEEP tot', color: '#f4c542', val: o => o.peepTot.toFixed(1), unit: 'cmH₂O' },
+		{ label: 'VT', color: '#5cc8f0', val: o => o.vt.toFixed(0), unit: 'mL' },
+		{ label: 'FR', color: '#5cc8f0', val: o => o.rr.toFixed(0), unit: '/min' },
+		{ label: 'GC', color: '#ff9f6b', val: o => o.co.toFixed(1), unit: 'L/min' },
+		{ label: 'PVC', color: '#b9a4ff', val: o => o.rap.toFixed(0), unit: 'mmHg' },
+		{ label: 'PAPm', color: '#e7e3d4', val: o => o.mpap.toFixed(0), unit: 'mmHg' }
+	];
 
 	//absolute significance thresholds for the narrative (others: 3% relative)
 	const SIG = { spo2: 1, ph: 0.02, strain: 0.05, ti: 0.05, fio2: 1, hb: 0.3, lactate: 0.3, autopeep: 0.5, peeptot: 0.5, ppl: 0.5, rap: 0.7, pmsf: 0.5, vrg: 0.5, symp: 5, overdist: 3, ppv: 2, recruit: 2, shunt: 1.5, vdvt: 2, rvfunc: 3 };
@@ -623,14 +597,12 @@
 		box.innerHTML =
 			'<div class="nd-cat"><i></i><span></span><button class="btn btn-small nd-close" aria-label="Chiudi">×</button></div>' +
 			'<h2 class="nd-title"></h2>' +
-			'<div class="nd-actions"><button type="button" class="btn btn-small nd-live"><span class="nd-live-fx" aria-hidden="true">ƒ(x)</span> Equazioni dal vivo</button>' +
-						'<button type="button" class="btn btn-small nd-power" aria-pressed="false"></button></div>' +
+			'<button type="button" class="btn btn-small nd-live"><span class="nd-live-fx" aria-hidden="true">ƒ(x)</span> Equazioni dal vivo</button>' +
 			'<div class="nd-value"><output class="nd-big"></output><span class="nd-unit"></span><span class="pill"></span></div>' +
 			'<p class="nd-sub"></p>' +
 			'<canvas class="nd-spark" aria-label="Andamento negli ultimi 10 minuti"></canvas>' +
 			'<h3>Cosa rappresenta</h3><p class="nd-desc"></p>' +
-			'<h3>In breve</h3><p class="formula-simple"></p>' +
-						'<h3>Come si calcola</h3><p class="formula"></p>' +
+			'<h3>Come si calcola</h3><p class="formula"></p>' +
 			'<h3>Dipende da</h3><div class="rel" data-dir="in"></div>' +
 			'<h3>Influenza</h3><div class="rel" data-dir="out"></div>';
 		box.querySelector('.nd-cat i').style.background = cat.color;
@@ -643,10 +615,6 @@
 		box.querySelector('.nd-title').textContent = n.labelFn ? n.labelFn(out) : n.label;
 		box.querySelector('.nd-desc').textContent = n.desc;
 		box.querySelector('.formula').textContent = n.formula;
-				box.querySelector('.formula-simple').textContent = n.simple;
-				const pw = box.querySelector('.nd-power');
-				pw.hidden = !FREEZABLE.has(id);
-				pw.addEventListener('click', () => toggleNode(id));
 		const rel = (dir, list) => {
 			const c = box.querySelector('.rel[data-dir="' + dir + '"]');
 			if (!list.length) { c.innerHTML = '<p class="hint">Parametro impostato dall’operatore o dalla condizione del paziente.</p>'; return []; }
@@ -683,13 +651,7 @@
 			c.el.textContent = fmtNum(C.nodeValue(o, out), o.dec);
 		});
 		const rows = history.filter(r => r.t >= out.t - 600);
-				sparkline(box.querySelector('.nd-spark'), rows, n.id, cssVar('--c-' + n.cat) || '#0b6e82');
-				const off = inspectorRefs.id in model.frozen;
-				const pw = box.querySelector('.nd-power');
-				pw.textContent = off ? '⏻ Riattiva nodo' : '⏻ Disattiva nodo';
-				pw.classList.toggle('is-off', off);
-				pw.setAttribute('aria-pressed', off);
-				box.classList.toggle('node-off', off);
+		sparkline(box.querySelector('.nd-spark'), rows, n.id, cssVar('--c-' + n.cat) || '#0b6e82');
 	}
 
 	function recordHistory() {
@@ -706,8 +668,8 @@
 		const box = $('numerics');
 		box.innerHTML = '';
 		numericEls = NUMERICS.map(nm => {
-					const d = document.createElement('div');
-					d.className = 'num' + (nm.vital ? ' vital' : ' ventn');
+			const d = document.createElement('div');
+			d.className = 'num';
 			d.style.setProperty('--num-color', nm.color);
 			d.innerHTML = '<span class="num-label"></span><span class="num-val"></span><span class="num-unit"></span>';
 			d.querySelector('.num-label').textContent = nm.label;
@@ -723,9 +685,7 @@
 
 	function updateUI() {
 		$('sim-time').textContent = fmtTime(out.t);
-				syncNodeSwitches();
-				$('vent-mode-label').textContent = modeLabel(out);
-				graph.update(out, reference, out.t - lastGraphSimT);
+		graph.update(out, reference, out.t - lastGraphSimT);
 		lastGraphSimT = out.t;
 		numericEls.forEach(e => {
 			e.val.textContent = e.nm.val(out);
@@ -818,161 +778,7 @@
 		$('z-fit').addEventListener('click', () => graph.fit());
 		$('z-reset').addEventListener('click', () => graph.resetLayout());
 		$('import-file').addEventListener('change', ev => { if (ev.target.files[0]) importFile(ev.target.files[0]); ev.target.value = ''; });
-				wireView();
-			}
-
-			/* ------------------------------------------------------------ view, settings, switched-off nodes */
-
-			const PREFS_KEY = 'breathe-nodesim-prefs';
-			let prefs = { view: 'full', formulas: false, switches: false };
-			try { prefs = Object.assign(prefs, JSON.parse(localStorage.getItem(PREFS_KEY) || '{}')); } catch (e) { /* storage unavailable */ }
-			const savePrefs = () => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) { /* storage unavailable */ } };
-
-			function setView(v) {
-				prefs.view = v === 'console' ? 'console' : 'full';
-				savePrefs();
-				document.querySelector('.app').classList.toggle('console-mode', prefs.view === 'console');
-				document.querySelectorAll('#view-mode button').forEach(b => {
-					const on = b.dataset.view === prefs.view;
-					b.classList.toggle('on', on);
-					b.setAttribute('aria-checked', on);
-				});
-				if (prefs.view === 'full') requestAnimationFrame(() => graph.fit());
-			}
-
-			function wireView() {
-				document.querySelectorAll('#view-mode button').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
-				const menu = $('settings-menu'), btn = $('btn-settings');
-				const close = () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
-				btn.addEventListener('click', ev => {
-					ev.stopPropagation();
-					menu.hidden = !menu.hidden;
-					btn.setAttribute('aria-expanded', String(!menu.hidden));
-				});
-				document.addEventListener('click', ev => { if (!menu.hidden && !menu.contains(ev.target)) close(); });
-				document.addEventListener('keydown', ev => { if (ev.key === 'Escape') close(); });
-				$('set-formulas').checked = prefs.formulas;
-				$('set-switches').checked = prefs.switches;
-				$('set-formulas').addEventListener('change', ev => { prefs.formulas = ev.target.checked; savePrefs(); graph.setFormulas(prefs.formulas); });
-				$('set-switches').addEventListener('change', ev => { prefs.switches = ev.target.checked; savePrefs(); $('graph').classList.toggle('show-switches', prefs.switches); });
-				$('btn-all-on').addEventListener('click', () => {
-					const ids = Object.keys(model.frozen);
-					ids.forEach(id => model.setNodeEnabled(id, true));
-					if (ids.length) logEvent('Riattivati tutti i nodi (' + ids.map(id => C.byId[id].label).join(', ') + ')', '', true);
-					syncNodeSwitches();
-				});
-				//nodes that cannot be switched off (settings and patient characteristics) have no switch
-				C.NODES.forEach(n => { if (!FREEZABLE.has(n.id)) graph.nodeEls[n.id].pwr.style.display = 'none'; });
-				graph.onToggle = toggleNode;
-				if (prefs.formulas) graph.setFormulas(true);
-				$('graph').classList.toggle('show-switches', prefs.switches);
-				setView(prefs.view);
-			}
-
-			function toggleNode(id) {
-				if (!FREEZABLE.has(id)) return;
-				const n = C.byId[id];
-				const wasOff = id in model.frozen;
-				model.setNodeEnabled(id, wasOff);
-				const v = C.nodeValue(n, out);
-				logEvent(wasOff ? 'Nodo riattivato: ' + n.label
-					: 'Nodo disattivato: ' + n.label + ' fisso a ' + fmtNum(v, n.dec) + ' ' + (n.unitFn ? n.unitFn(out) : n.unit), '', true);
-				syncNodeSwitches();
-				updateInspector();
-				eqView.update(out, true);
-			}
-
-			function syncNodeSwitches() {
-				const ids = Object.keys(model.frozen);
-				graph.setOff(ids);
-				$('btn-all-on').disabled = !ids.length;
-				$('btn-all-on').textContent = ids.length ? 'Riattiva tutti i nodi (' + ids.length + ')' : 'Riattiva tutti i nodi';
-			}
-
-			/* ------------------------------------------------------------ ventilator console */
-
-			function modeLabel(o) {
-				if (o.mode === 'SI') return 'RECLUTAMENTO · CPAP ' + o.pplat.toFixed(0) + ' cmH₂O';
-				const v = model.ventilator;
-				if (o.mode === 'CPAP') return 'CPAP / ASB';
-				return (o.mode === 'VC' ? 'VC' : 'PC') + (v.AssistedMode === 0 ? '-AC' : '-CMV');
-			}
-
-			function holdLabel(type) { return type === 'insp' ? 'Pausa inspiratoria' : 'Pausa espiratoria'; }
-
-			function renderHoldResults() {
-				const box = $('hold-results');
-				const ri = holdRes('insp'), re = holdRes('exp');
-				const row = (l, v, u) => '<div class="hr-row"><span>' + l + '</span><b>' + v + '</b><i>' + u + '</i></div>';
-				let html = '<h3>Manovre di pausa</h3>';
-				if (!ri && !re) html += '<p class="hint">Premi <b>Pausa insp.</b> o <b>Pausa esp.</b>: i valori misurati compaiono qui.</p>';
-				if (ri) html += row('Pplat', ri.pplat.toFixed(1), 'cmH₂O') + row('ΔP', ri.dp.toFixed(1), 'cmH₂O') +
-					row('Cstat', ri.cstat ? ri.cstat.toFixed(0) : dash, 'mL/cmH₂O') + row('R', ri.raw ? ri.raw.toFixed(1) : dash, 'cmH₂O/L/s');
-				if (re) html += row('PEEP tot', re.peepTot.toFixed(1), 'cmH₂O') + row('PEEPi', re.peepi.toFixed(1), 'cmH₂O') + row('V intrappolato', re.vtrap.toFixed(0), 'mL');
-				box.innerHTML = html;
-			}
-
-			function wireConsole() {
-				const status = $('hold-status');
-				monitor.onHoldStart = type => {
-					status.textContent = holdLabel(type) + ' in corso: valvole chiuse';
-					status.className = 'vent-status busy';
-				};
-				monitor.onHoldEnd = (type, r) => {
-					const text = type === 'insp'
-						? holdLabel(type) + ': Pplat ' + r.pplat.toFixed(1) + ', ΔP ' + r.dp.toFixed(1) + ' cmH₂O' + (r.cstat ? ', Cstat ' + r.cstat.toFixed(0) + ' mL/cmH₂O' : '') + (r.raw ? ', R ' + r.raw.toFixed(1) + ' cmH₂O/L/s' : '')
-						: holdLabel(type) + ': PEEP totale ' + r.peepTot.toFixed(1) + ', PEEPi ' + r.peepi.toFixed(1) + ' cmH₂O, volume intrappolato ' + r.vtrap.toFixed(0) + ' mL';
-					status.textContent = text;
-					status.className = 'vent-status done';
-					document.querySelectorAll('.vkey').forEach(b => b.classList.remove('armed'));
-					renderHoldResults();
-					logEvent(text, type === 'insp' && !r.peepRefMeasured && out.autoPeep > 0.5 ? 'ΔP e Cstat sono calcolati con la PEEP impostata: esegui anche la pausa espiratoria per usare la PEEP totale.' : '', true);
-				};
-				const bindHold = (id, type) => {
-					const b = $(id);
-					let pressed = false;
-					b.addEventListener('pointerdown', ev => {
-						if (ev.button !== 0) return;
-						pressed = true;
-						startHold(type, 15);
-					});
-					const up = () => { if (pressed) { pressed = false; monitor.releaseHold(type); } };
-					b.addEventListener('pointerup', up);
-					b.addEventListener('pointerleave', up);
-					b.addEventListener('click', ev => { if (ev.detail === 0) startHold(type); }); // keyboard
-				};
-				bindHold('hold-insp', 'insp');
-				bindHold('hold-exp', 'exp');
-				$('freeze').addEventListener('click', () => {
-					const on = monitor.toggleFreeze();
-					$('freeze').setAttribute('aria-pressed', on);
-					$('freeze').classList.toggle('on', on);
-				});
-				renderHoldResults();
-			}
-
-			function startHold(type, dur) {
-				if (!monitor.requestHold(type, dur)) {
-					$('hold-status').textContent = 'Nessun respiro da mettere in pausa (apnea o insufflazione sostenuta)';
-					$('hold-status').className = 'vent-status';
-					return false;
-				}
-				$(type === 'insp' ? 'hold-insp' : 'hold-exp').classList.add('armed');
-				$('hold-status').textContent = holdLabel(type) + ': in attesa della fine ' + (type === 'insp' ? 'dell’inspirazione' : 'dell’espirazione') + '…';
-				$('hold-status').className = 'vent-status busy';
-				return true;
-			}
-
-			//The same maneuver, computed at once on a copy of the current breath (for the assistant)
-			function measureHold(type) {
-				const p = new BreathPlayer();
-				let res = null;
-				p.onHoldEnd = (t, r) => { res = r; };
-				p.advance(0.001, out);
-				p.requestHold(type, type === 'insp' ? 2 : 3);
-				for (let t = 0; t < 40 && !res; t += 0.02) p.advance(0.02, out);
-				return res;
-			}
+	}
 
 	function setSpeed(s) {
 		speed = s;
@@ -1145,26 +951,7 @@
 	}
 
 	window.NodeSim = {
-			state: describeState,
-			setNodeEnabled(id, enabled) {
-				const n = C.byId[id];
-				if (!n) throw new Error('Nodo sconosciuto: ' + id + '. Nodi disattivabili: ' + [...FREEZABLE].join(', '));
-				if (!FREEZABLE.has(id)) throw new Error('Il nodo "' + n.label + '" è un\'impostazione o una caratteristica del paziente: non si può disattivare');
-				if ((id in model.frozen) === !enabled) return { node: n.label, enabled: !!enabled, note: 'già in questo stato' };
-				toggleNode(id);
-				return { node: n.label, enabled: !!enabled, frozenValue: enabled ? null : rnd(C.nodeValue(n, out)), switchedOff: Object.keys(model.frozen) };
-			},
-			switchedOffNodes: () => Object.keys(model.frozen).map(id => ({ id, label: C.byId[id].label })),
-			freezableNodes: () => [...FREEZABLE].map(id => ({ id, label: C.byId[id].label })),
-			holdManeuver(type) {
-				type = type === 'exp' || type === 'expiratory' ? 'exp' : 'insp';
-				startHold(type);
-				const r = measureHold(type);
-				if (!r) throw new Error('Nessun respiro da mettere in pausa (apnea o insufflazione sostenuta)');
-				const o = {};
-				for (const k in r) if (typeof r[k] === 'number' && k !== 'at') o[k] = rnd(r[k]);
-				return Object.assign({ maneuver: holdLabel(type) }, o);
-			},
+		state: describeState,
 		advance,
 		setVentilator: setVentilatorApi,
 		recruitment(pressure, seconds) {
@@ -1208,8 +995,7 @@
 			graph.select(g.dataset.id);
 			eqView.open(g.dataset.id, out);
 		});
-		monitor = new VentConsole($('monitor'), { abp: true, loop: $('loop') });
-				wireConsole();
+		monitor = new Monitor($('monitor'));
 		trends = new Trends($('trends'), TREND_SERIES);
 		buildNumerics();
 		wire();

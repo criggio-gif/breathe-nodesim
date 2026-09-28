@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400&display=swap">
-<link rel="stylesheet" href="css/style.css?v=9">
+<link rel="stylesheet" href="css/style.css?v=8">
 </head>
 <body>
 <div class="app">
@@ -17,7 +17,7 @@
 			<span class="brand-mark" aria-hidden="true"></span>
 			<div>
 				<h1>BREATHE <span>NodeSim</span></h1>
-				<p class="brand-sub">Fisiologia del paziente in ventilazione meccanica, a nodi</p>
+				<p class="brand-sub">Versione classica (backup) · <a href="../">vai alla versione attuale</a></p>
 			</div>
 		</div>
 		<div class="clock" role="group" aria-label="Controllo del tempo simulato">
@@ -30,25 +30,8 @@
 				<button data-speed="60" role="radio" aria-checked="false">60&times;</button>
 			</div>
 			<button id="btn-reset" class="btn" title="Ricrea il paziente allo stato stazionario">Riavvia</button>
-					</div>
-					<div class="view-controls">
-						<div class="seg" id="view-mode" role="radiogroup" aria-label="Vista">
-							<button data-view="full" class="on" role="radio" aria-checked="true" title="Rete dei nodi e console">Rete + console</button>
-							<button data-view="console" role="radio" aria-checked="false" title="Nasconde i nodi: solo ventilatore e monitor">Solo console</button>
-						</div>
-						<div class="settings">
-							<button id="btn-settings" class="btn" aria-haspopup="true" aria-expanded="false" aria-controls="settings-menu">&#9881; Impostazioni</button>
-							<div class="settings-menu" id="settings-menu" hidden>
-								<label class="toggle"><input type="checkbox" id="set-formulas"><span>Formule semplificate sui nodi</span></label>
-								<label class="toggle"><input type="checkbox" id="set-switches"><span>Interruttori sempre visibili sui nodi</span></label>
-								<p class="hint">Un nodo disattivato resta fermo al suo valore: non risente dei nodi a monte e non trasmette variazioni a quelli a valle. Si disattiva con l'interruttore <b>&#9211;</b> sul nodo o dalla scheda del nodo.</p>
-								<button class="btn btn-small" id="btn-all-on" disabled>Riattiva tutti i nodi</button>
-								<hr>
-								<a class="menu-link" href="classic/">Versione classica (backup)</a>
-							</div>
-						</div>
-					</div>
-				</header>
+		</div>
+	</header>
 
 	<aside class="controls" aria-label="Impostazioni">
 		<section class="panel">
@@ -134,17 +117,7 @@
 
 		<section class="bedside">
 			<div class="monitor-wrap">
-				<div class="vent-head">
-					<span class="vent-mode-label" id="vent-mode-label">VC-CMV</span>
-					<span class="vent-status" id="hold-status" aria-live="polite"></span>
-					<div class="vent-keys">
-						<button class="vkey" id="hold-insp" title="Clic: pausa di 2 s alla fine della prossima inspirazione (misura Pplat, compliance e resistenze). Tieni premuto per prolungarla, max 15 s.">Pausa insp.</button>
-						<button class="vkey" id="hold-exp" title="Clic: pausa di 3 s alla fine della prossima espirazione (misura PEEP totale e auto-PEEP). Tieni premuto per prolungarla, max 15 s.">Pausa esp.</button>
-						<button class="vkey" id="freeze" aria-pressed="false" title="Congela le curve sullo schermo per analizzarle">Congela</button>
-					</div>
-				</div>
-				<div class="monitor-screen"><canvas id="monitor" aria-label="Curve di pressione, flusso, volume e pressione arteriosa"></canvas></div>
-				<div class="loop-screen"><canvas id="loop" aria-label="Loop pressione-volume"></canvas><div class="hold-results" id="hold-results"></div></div>
+				<div class="monitor-screen"><canvas id="monitor" aria-label="Curve di pressione, flusso e pressione arteriosa"></canvas></div>
 				<div class="numerics" id="numerics"></div>
 			</div>
 			<div class="trends-wrap">
@@ -185,8 +158,6 @@
 				<p>Ogni riquadro è un concetto di fisiologia; le frecce indicano chi influenza chi. <strong>+</strong> significa che le due grandezze si muovono nello stesso verso, <strong>&minus;</strong> in verso opposto.</p>
 				<p>Quando modifichi la PEEP o esegui una manovra, le frecce che partono da un nodo che sta cambiando si animano: puoi seguire l'effetto a cascata dalla meccanica al cuore. Le frecce &#9650;&#9660; nei nodi mostrano la variazione rispetto a prima dell'ultimo intervento.</p>
 				<p>Seleziona un nodo per vedere cosa rappresenta, come viene calcolato e da cosa dipende; con <strong>Equazioni dal vivo</strong> (o un doppio clic sul nodo) vedi le sue equazioni con i valori del paziente in tempo reale. I nodi si possono trascinare.</p>
-				<p>Con l'interruttore <strong>&#9211;</strong> puoi <strong>disattivare un nodo</strong>: il suo valore resta fisso e i collegamenti si interrompono, così vedi cosa succede al paziente senza quel meccanismo (per esempio senza la trasmissione della PEEP alla pleura o senza il riflesso simpatico).</p>
-				<p>Sulla console, <strong>Pausa insp.</strong> e <strong>Pausa esp.</strong> eseguono le pause di fine inspirazione ed espirazione: misurano Pplat, compliance, resistenze, PEEP totale e auto-PEEP.</p>
 			</div>
 			<div id="node-detail" hidden></div>
 		</section>
@@ -197,13 +168,12 @@
 	</aside>
 </div>
 
-<script src="js/physiology.js?v=9"></script>
-<script src="js/nodes.js?v=9"></script>
-<script src="js/graph.js?v=9"></script>
-<script src="js/monitor.js?v=9"></script>
-<script src="js/console.js?v=9"></script>
-<script src="js/equations.js?v=9"></script>
-<script src="js/app.js?v=9"></script>
-<script src="js/assistant.js?v=9"></script>
+<script src="js/physiology.js?v=8"></script>
+<script src="js/nodes.js?v=8"></script>
+<script src="js/graph.js?v=8"></script>
+<script src="js/monitor.js?v=8"></script>
+<script src="js/equations.js?v=8"></script>
+<script src="js/app.js?v=8"></script>
+<script src="js/assistant.js?v=8"></script>
 </body>
 </html>

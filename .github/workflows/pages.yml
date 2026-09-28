@@ -26,6 +26,7 @@ jobs:
           node-version: 20
       - run: node test/physiology.test.js
       - run: node test/equations.test.js
+      - run: node test/console.test.js
 
   deploy:
     needs: test
@@ -37,7 +38,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
       - name: Collect site files
-        run: mkdir _site && cp -r index.html css js _site/
+        run: mkdir _site && cp -r index.html css js classic _site/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

@@ -40,13 +40,19 @@ node test/equations.test.js
   - bolo di fluidi, emorragia.
 - **Paziente, condizioni e azioni** con i nomi di `data.Patient`, `data.Condition` (ARDS, Pneumonia, COPD, Pulmonary Fibrosis, Pulmonary Shunt, Pericardial Effusion, Chronic Anemia, Chronic Ventricular Systolic Disfunction) e `data.Action` (Bronchoconstriction, Airway Obstruction, Acute Stress, Ventilator Leak). In più: volemia e sedazione.
 - **Importazione** di un paziente da `breathe.engine/resources/patients/*.json` o da uno stato `breathe.engine/states/*.json` (sezione `InitialPatient`, come in `Patient.loadPatientData`).
-- **Monitor** con curve di pressione, flusso e pressione arteriosa (con variazione respiratoria), parametri numerici e trend con i marcatori degli interventi.
+- **Console del ventilatore** (`js/console.js`): curve di pressione, flusso, volume e pressione arteriosa integrate respiro per respiro su un polmone RC (flusso costante con pausa di fine inspirazione in VC, flusso decelerato in PC, trigger e ciclaggio al 25% del picco di flusso in pressione di supporto, espirazione passiva), con scale graduate, loop pressione-volume e tasto **Congela**. Valori misurati come su un ventilatore da terapia intensiva: Ppicco, Pplat, Pmedia, PEEP, VTe, VM, FR.
+- **Pause inspiratoria ed espiratoria**, sul modello dei tasti "Insp. hold" ed "Exp. hold" dei ventilatori Dräger: clic per una pausa di 2 s (inspiratoria) o 3 s (espiratoria), tieni premuto per prolungarla fino a 15 s. La pausa inspiratoria misura Pplat, ΔP, compliance statica e resistenze; quella espiratoria PEEP totale, auto-PEEP e volume intrappolato. `test/console.test.js` verifica che le misure coincidano con il modello.
+- **Solo console**: la vista nasconde i nodi e ingrandisce la console, con loop P-V e risultati delle pause.
+- **Nodi disattivabili**: con l'interruttore sul nodo (o dalla sua scheda) un nodo si disattiva: resta fermo al valore che aveva, non risente dei nodi a monte e non trasmette variazioni a valle; diventa grigio e i suoi collegamenti si interrompono. Serve a vedere cosa succede senza un meccanismo (per esempio PEEP senza trasmissione alla pleura, emorragia senza riflesso simpatico). Si possono disattivare tutti i nodi calcolati; impostazioni e caratteristiche del paziente no.
+- **Formule semplificate**: dal menu Impostazioni ogni nodo mostra la sua formula in una riga; anche la lavagna delle equazioni ha la vista "Semplificata".
+- **Trend** con i marcatori degli interventi.
 - **Cosa è successo**: dopo ogni intervento il pannello elenca le variabili cambiate, prima → dopo, e per ciascuna le cause a monte coerenti con il grafo.
 - Tempo simulato 1×, 5×, 20×, 60×.
 - **Equazioni dal vivo**: dal pannello di un nodo (o con un doppio clic sul nodo) si apre una lavagna con le equazioni del modello per quel nodo, in forma simbolica e con i valori attuali del paziente sostituiti. I numeri si aggiornano in tempo reale e lampeggiano quando cambiano; ogni variabile porta all'equazione del nodo da cui dipende. `test/equations.test.js` verifica che ogni equazione mostrata coincida con il calcolo del modello.
 - **Assistente**: pannello in cui descrivere a parole cosa succede o cosa si fa.
   - Nella versione aperta su **claude.ai** risponde Claude: capisce frasi libere ("lo specializzando fa un reclutamento a 40 cmH₂O per 30 secondi"), applica le azioni al simulatore tramite gli strumenti di `window.NodeSim`, fa trascorrere il tempo e spiega gli effetti con i valori del modello. Usa l'utilizzo di Claude di chi lo apre, che la prima volta deve dare il permesso.
-  - Altrove (GitHub Pages, file locale) funziona come interprete di comandi in italiano, senza IA: `PEEP 15`, `FiO2 60%`, `reclutamento 40 per 30 s`, `bolo 500 mL`, `avanza 2 minuti`, `ARDS grave`, `stato`, `aiuto`.
+  - Altrove (GitHub Pages, file locale) funziona come interprete di comandi in italiano, senza IA: `PEEP 15`, `FiO2 60%`, `reclutamento 40 per 30 s`, `bolo 500 mL`, `avanza 2 minuti`, `ARDS grave`, `pausa espiratoria`, `disattiva pressione pleurica`, `riattiva tutti`, `stato`, `aiuto`.
+  - **Versione classica**: la versione precedente resta disponibile in `classic/` (link dal menu Impostazioni) e nel ramo `backup-v1-2d`.
 
 ## Modello
 
@@ -71,9 +77,13 @@ breathe-nodesim/
 ├── js/physiology.js   modello fisiologico (usabile anche da Node.js)
 ├── js/nodes.js        catalogo dei nodi e delle relazioni
 ├── js/graph.js        grafo SVG (pan, zoom, trascinamento, propagazione)
-├── js/monitor.js      monitor a curve e trend
+├── js/monitor.js      trend e grafici del pannello nodo
+├── js/console.js      console del ventilatore: curve, pause inspiratoria ed espiratoria, loop P-V
 ├── js/app.js          controlli, manovre, narrazione, loop di simulazione, API window.NodeSim
 ├── js/equations.js    equazioni dal vivo di ogni nodo (lavagna)
 ├── js/assistant.js    pannello Assistente (Claude su claude.ai, comandi semplici altrove)
-└── test/physiology.test.js
+├── classic/           versione precedente (backup)
+├── test/physiology.test.js
+├── test/equations.test.js
+└── test/console.test.js
 ```

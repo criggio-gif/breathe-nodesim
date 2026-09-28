@@ -7,8 +7,7 @@
 	'use strict';
 
 	const SVGNS = 'http://www.w3.org/2000/svg';
-	const NODE_W = 184, NODE_H = 62, NODE_H_F = 88, COL_W = 240, ROW_H = 76, TOP = 46, LEFT = 16, PAD = 10;
-	const Y_SCALE_F = 1.34; // rows spread out when the nodes also show their formula
+	const NODE_W = 184, NODE_H = 62, COL_W = 240, ROW_H = 76, TOP = 46, LEFT = 16, PAD = 10;
 	const LAYOUT_KEY = 'breathe-nodesim-layout-v2';
 
 	function el(name, attrs, parent) {
@@ -45,34 +44,12 @@
 		return v.toFixed(dec).replace('-', '−');
 	}
 
-	//Split a text on two lines that fit maxWidth (the second one ends with an ellipsis if needed)
-	function wrap2(el1, el2, text, maxWidth) {
-		if (el1.__wrap === text && el1.__wmax === maxWidth) return;
-		el1.__wrap = text; el1.__wmax = maxWidth;
-		el1.__full = null; el2.__full = null;
-		const words = (text || '').split(' ');
-		let line = '';
-		let i = 0;
-		for (; i < words.length; i++) {
-			const next = line ? line + ' ' + words[i] : words[i];
-			el1.textContent = next;
-			if (textWidth(el1) > maxWidth && line) break;
-			line = next;
-		}
-		fitText(el1, line, maxWidth);
-		fitText(el2, words.slice(i).join(' '), maxWidth);
-	}
-
 	class NodeGraph {
 
 		constructor(svg, catalog, onSelect) {
 			this.svg = svg;
 			this.C = catalog;
 			this.onSelect = onSelect;
-			this.onToggle = null;      // (id) => switch a node off / on
-			this.off = new Set();
-			this.showFormulas = false;
-			this.yScale = 1;
 			this.selected = null;
 			this.activity = {};
 			this.lastValues = {};
@@ -89,7 +66,7 @@
 			this.C.NODES.forEach(n => {
 				const els = this.nodeEls[n.id];
 				els.label.__full = null; els.sub.__full = null;
-				fitText(els.label, n.label, NODE_W - 24 - PAD - 18);
+				fitText(els.label, n.label, NODE_W - 24 - PAD);
 			});
 		}
 
@@ -145,11 +122,9 @@
 
 			this.nodeEls = {};
 			this.C.NODES.forEach(n => {
-				const outer = el('g', { class: 'node', tabindex: '0', role: 'button', 'data-id': n.id }, this.nodeLayer);
-				//inner group: CSS animations can scale it without touching the position transform
-				const g = el('g', { class: 'node-inner' }, outer);
+				const g = el('g', { class: 'node', tabindex: '0', role: 'button', 'data-id': n.id }, this.nodeLayer);
 				const cat = this.C.CATEGORIES[n.cat];
-				const box = el('rect', { class: 'node-box', width: NODE_W, height: NODE_H, rx: '7' }, g);
+				el('rect', { class: 'node-box', width: NODE_W, height: NODE_H, rx: '7' }, g);
 				el('rect', { class: 'node-cat', x: '10', y: '10', width: '8', height: '8', rx: '2', style: 'fill:' + cat.color }, g);
 				//line 1: label; line 2: value + unit; line 3: subtitle (left) and change since reference (right)
 				const label = el('text', { class: 'node-label', x: '24', y: '18' }, g);
@@ -158,91 +133,23 @@
 				const vUnit = el('tspan', { class: 'node-unit', dx: '4' }, value);
 				const sub = el('text', { class: 'node-sub', x: PAD, y: '55' }, g);
 				const delta = el('text', { class: 'node-delta', x: NODE_W - PAD, y: '55', 'text-anchor': 'end' }, g);
-				//simplified formula (two lines, shown on request)
-				const f1 = el('text', { class: 'node-formula', x: PAD, y: '71', style: 'display:none' }, g);
-				const f2 = el('text', { class: 'node-formula', x: PAD, y: '83', style: 'display:none' }, g);
-				//power switch
-				const pwr = el('g', { class: 'node-pwr', role: 'button', 'aria-pressed': 'false', transform: 'translate(' + (NODE_W - 15) + ',14)' }, g);
-				el('circle', { r: '8.5' }, pwr);
-				el('path', { d: 'M0,-4.6 V-0.6 M-3.1,-2.9 A4.2,4.2 0 1 0 3.1,-2.9', class: 'pwr-icon' }, pwr);
-				const pwrTitle = el('title', {}, pwr);
-				pwrTitle.textContent = 'Disattiva il nodo (il valore resta fisso)';
 				const title = el('title', {}, g);
 				title.textContent = n.label + ' – ' + cat.label;
-				this.nodeEls[n.id] = { g: outer, inner: g, box, label, value, vNum, vUnit, delta, sub, f1, f2, pwr, pwrTitle };
-				fitText(label, n.label, NODE_W - 24 - PAD - 18);
+				this.nodeEls[n.id] = { g, label, value, vNum, vUnit, delta, sub };
+				fitText(label, n.label, NODE_W - 24 - PAD);
 				this.placeNode(n.id);
-				this.bindNode(outer, n);
-				pwr.addEventListener('pointerdown', ev => ev.stopPropagation());
-				pwr.addEventListener('pointerup', ev => { ev.stopPropagation(); if (this.onToggle) this.onToggle(n.id); });
+				this.bindNode(g, n);
 			});
 			this.redrawEdges();
 		}
 
-		//Drawn position: rows spread out when formulas are shown (the saved layout is not changed)
-		P(id) { const p = this.pos[id]; return { x: p.x, y: p.y * this.yScale }; }
-
 		placeNode(id) {
-			const p = this.P(id);
+			const p = this.pos[id];
 			this.nodeEls[id].g.setAttribute('transform', 'translate(' + p.x + ',' + p.y + ')');
 		}
 
-		nodeH() { return this.showFormulas ? NODE_H_F : NODE_H; }
-
-		setFormulas(on) {
-			this.showFormulas = !!on;
-			this.yScale = on ? Y_SCALE_F : 1;
-			this.svg.classList.toggle('with-formulas', this.showFormulas);
-			this.C.NODES.forEach(n => {
-				const els = this.nodeEls[n.id];
-				els.box.setAttribute('height', this.nodeH());
-				els.f1.style.display = els.f2.style.display = on ? '' : 'none';
-				if (on) wrap2(els.f1, els.f2, n.simple || '', NODE_W - 2 * PAD);
-				this.placeNode(n.id);
-			});
-			this.redrawEdges();
-			this.fit();
-		}
-
-		/*
-		 * Switched-off nodes: grey, frozen value, and their links are cut. The animation runs only
-		 * for the nodes whose state changed.
-		 */
-		setOff(ids) {
-			const next = new Set(ids);
-			const changed = [];
-			this.C.NODES.forEach(n => { if (next.has(n.id) !== this.off.has(n.id)) changed.push(n.id); });
-			this.off = next;
-			changed.forEach(id => {
-				const g = this.nodeEls[id].g, on = next.has(id);
-				g.classList.toggle('off', on);
-				g.classList.remove('power-down', 'power-up');
-				void g.getBoundingClientRect();
-				g.classList.add(on ? 'power-down' : 'power-up');
-				this.nodeEls[id].pwr.setAttribute('aria-pressed', on);
-				this.nodeEls[id].pwrTitle.textContent = on ? 'Riattiva il nodo' : 'Disattiva il nodo (il valore resta fisso)';
-				this.ripple(id, on);
-			});
-			this.edges.forEach(e => {
-				const cut = next.has(e.src) || next.has(e.dst);
-				const was = e.g.classList.contains('cut');
-				if (cut === was) return;
-				e.g.classList.toggle('cut', cut);
-				e.g.classList.remove('regrow');
-				if (!cut) { void e.g.getBoundingClientRect(); e.g.classList.add('regrow'); }
-			});
-		}
-
-		//expanding outline around a node that is switched off (grey) or on (accent)
-		ripple(id, off) {
-			const p = this.P(id);
-			const r = el('rect', { class: 'node-ripple' + (off ? ' off' : ''), x: p.x, y: p.y, width: NODE_W, height: this.nodeH(), rx: 7 }, this.nodeLayer);
-			setTimeout(() => r.remove(), 900);
-		}
-
 		edgeGeometry(a, b) {
-			const hh = this.nodeH() / 2;
-			const ax = a.x, ay = a.y + hh, bx = b.x, by = b.y + hh;
+			const ax = a.x, ay = a.y + NODE_H / 2, bx = b.x, by = b.y + NODE_H / 2;
 			let x1, x2, c1, c2;
 			if (Math.abs(ax - bx) < NODE_W * 0.6) {
 				//same column: loop on the right side
@@ -268,7 +175,7 @@
 		redrawEdges(onlyId) {
 			this.edges.forEach(e => {
 				if (onlyId && e.src !== onlyId && e.dst !== onlyId) return;
-				const geo = this.edgeGeometry(this.P(e.src), this.P(e.dst));
+				const geo = this.edgeGeometry(this.pos[e.src], this.pos[e.dst]);
 				e.path.setAttribute('d', geo.d);
 				e.badge.setAttribute('transform', 'translate(' + geo.mx + ',' + geo.my + ')');
 			});
@@ -279,8 +186,7 @@
 			g.addEventListener('pointerdown', ev => {
 				ev.stopPropagation();
 				const pt = this.toGraph(ev);
-				const p0 = this.P(n.id);
-				drag = { dx: pt.x - p0.x, dy: pt.y - p0.y, moved: false, sx: ev.clientX, sy: ev.clientY };
+				drag = { dx: pt.x - this.pos[n.id].x, dy: pt.y - this.pos[n.id].y, moved: false, sx: ev.clientX, sy: ev.clientY };
 				try { g.setPointerCapture(ev.pointerId); } catch (e) { /* synthetic or finished pointer */ }
 			});
 			g.addEventListener('pointermove', ev => {
@@ -288,7 +194,7 @@
 				if (!drag.moved && Math.hypot(ev.clientX - drag.sx, ev.clientY - drag.sy) < 4) return;
 				drag.moved = true;
 				const pt = this.toGraph(ev);
-				this.pos[n.id] = { x: Math.round(pt.x - drag.dx), y: Math.round((pt.y - drag.dy) / this.yScale) };
+				this.pos[n.id] = { x: Math.round(pt.x - drag.dx), y: Math.round(pt.y - drag.dy) };
 				this.placeNode(n.id);
 				this.redrawEdges(n.id);
 			});
@@ -334,7 +240,7 @@
 				els.vNum.textContent = fmt(v, n.dec);
 				const unit = n.unitFn ? n.unitFn(o) : n.unit;
 				if (els.vUnit.textContent !== unit) els.vUnit.textContent = unit;
-				if (n.labelFn) fitText(els.label, n.labelFn(o), NODE_W - 24 - PAD - 18);
+				if (n.labelFn) fitText(els.label, n.labelFn(o), NODE_W - 24 - PAD);
 				const status = C.nodeStatus(n, o);
 				els.g.classList.toggle('warn', status === 'warn');
 				els.g.classList.toggle('crit', status === 'crit');
@@ -352,8 +258,7 @@
 				els.delta.textContent = deltaText;
 				els.delta.setAttribute('class', deltaClass);
 				const deltaW = deltaText ? textWidth(els.delta) + 8 : 0;
-				const off = this.off.has(n.id);
-				fitText(els.sub, off ? 'disattivato · valore fisso' : n.subFn ? n.subFn(o) : '', NODE_W - 2 * PAD - deltaW);
+				fitText(els.sub, n.subFn ? n.subFn(o) : '', NODE_W - 2 * PAD - deltaW);
 
 				//activity: relative rate of change (per simulated second), smoothed
 				const last = this.lastValues[n.id];
@@ -363,7 +268,7 @@
 				this.lastValues[n.id] = v;
 			});
 			this.edges.forEach(e => {
-				const a = this.off.has(e.src) || this.off.has(e.dst) ? 0 : this.activity[e.src] || 0;
+				const a = this.activity[e.src] || 0;
 				e.g.classList.toggle('active', a > 0.0015);
 				e.g.classList.toggle('fast', a > 0.01);
 			});
@@ -400,8 +305,8 @@
 		bounds() {
 			let x0 = Infinity, y0 = 0, x1 = -Infinity, y1 = -Infinity;
 			for (const k in this.pos) {
-				const p = this.P(k);
-				x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x + NODE_W + 50); y1 = Math.max(y1, p.y + this.nodeH());
+				const p = this.pos[k];
+				x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x + NODE_W + 50); y1 = Math.max(y1, p.y + NODE_H);
 			}
 			return { x: x0 - 10, y: y0, w: x1 - x0 + 20, h: y1 - y0 + 16 };
 		}

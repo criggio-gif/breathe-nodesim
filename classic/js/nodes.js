@@ -251,33 +251,8 @@
 			formula: 'pH = 6,1 + log₁₀(HCO₃⁻ / (0,03·PaCO₂))' }
 	];
 
-	//Simplified formulas: the idea behind each node in one line (shown with "Formule semplificate")
-	const SIMPLE = {
-		peep: 'PEEP = valore impostato', insp: 'VC: VT impostato · PC: Pinsp', rr: 'FR impostata (o spontanea se più alta)',
-		ti: 'Te = 60/FR − Ti', fio2: 'PAO₂ ≈ FiO₂·713 − PaCO₂/0,8', raw: 'R ↑ broncospasmo, BPCO, ostruzione',
-		ccw: 'Ccw ↓ con l’obesità', lungdz: 'reclutabile ↑ con ARDS e polmonite', volemia: 'volume circolante / normale',
-		contract: 'contrattilità ↓ con disfunzione VS',
-		vt: 'VC: VT = flusso × tempo · PC: VT ≈ ΔP × Crs', autopeep: 'PEEPi = V intrappolato / Crs',
-		peeptot: 'PEEPtot = PEEP + PEEPi', recruit: 'si apre se Pplat > Papertura, resta aperto se PEEP > Pchiusura',
-		crs: 'Crs = VT / (Pplat − PEEPtot)', pplat: 'Pplat = PEEPtot + VT / Crs', dp: 'ΔP = Pplat − PEEPtot = VT / Crs',
-		overdist: '↑ quando il volume di fine insp. si avvicina al massimo', mpaw: 'Pmedia ≈ PEEP + (Ppicco − PEEP)·Ti/Ttot',
-		mp: 'PM ≈ 0,098·FR·VT·(Ppicco − ΔP/2)', eelv: 'EELV = FRC aerata + volume da PEEP',
-		strain: 'strain = (VT + V_PEEP) / FRC', ppl: 'Ppl = Ppl₀ + V / Ccw', ptp: 'PL = Pplat − Ppl',
-		shunt: 'shunt ≈ polmone non aerato × perfusione', vdvt: 'VD/VT = 1 − VA / (FR·VT)', va: 'VA = FR · (VT − VD)',
-		paco2: 'PaCO₂ = 0,863 · VCO₂ / VA', etco2: 'EtCO₂ ≈ PaCO₂ · (1 − VD alveolare)',
-		pao2: 'CaO₂ = sangue ossigenato + sangue di shunt', spo2: 'SpO₂ = curva di dissociazione (PaO₂)', pf: 'P/F = PaO₂ / FiO₂',
-		pmsf: 'Pmsf ↑ con volemia, simpatico, Ppl', rap: 'PVC dove ritorno venoso = gittata', vrg: 'RV = (Pmsf − PVC) / Rrv',
-		pvr: 'PVR ↑ con atelettasia e sovradistensione', mpap: 'PAPm = Pvalle + GC × PVR', rvfunc: '↓ se il postcarico VD (Ea) supera la contrattilità (Ees)',
-		ppv: 'PPV ∝ oscillazione Ppl × dipendenza dal precarico', lvtm: 'postcarico VS = PAS − Ppl',
-		symp: '↑ se la PAM cala o con ipossia/ipercapnia', hr: 'FC = FCbase · (1 + 0,5 · simpatico)',
-		co: 'GC = ritorno venoso = (Pmsf − PVC) / Rrv', sv: 'GS = GC / FC', svr: 'RVS ↑ simpatico, ↓ acidosi', map: 'PAM = GC × RVS + PVC',
-		hb: 'Hb ↓ con anemia e diluizione', cao2: 'CaO₂ = 1,34·Hb·SaO₂ + 0,003·PaO₂', do2: 'DO₂ = GC × CaO₂ × 10',
-		vo2: 'VO₂ = metabolismo (se DO₂ basta)', svo2: 'CvO₂ = CaO₂ − VO₂ / (GC·10)', lactate: '↑ se estrazione O₂ > 45% o PAM < 60',
-		ph: 'pH = 6,1 + log(HCO₃⁻ / 0,03·PaCO₂)'
-	};
-
 	const byId = {};
-	NODES.forEach(n => { byId[n.id] = n; n.out = []; n.simple = SIMPLE[n.id] || n.formula; });
+	NODES.forEach(n => { byId[n.id] = n; n.out = []; });
 	NODES.forEach(n => n.in.forEach(([src, sign]) => byId[src].out.push([n.id, sign])));
 
 	function nodeValue(n, o) { return n.value ? n.value(o) : o[n.key]; }

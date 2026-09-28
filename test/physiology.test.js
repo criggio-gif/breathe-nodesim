@@ -162,6 +162,44 @@ check('alveolar O2 store: losing ventilation desaturates, faster with a small AR
 	assert(ards.dPAO2 > healthy.dPAO2, 'PAO2 fall ARDS ' + ards.dPAO2 + ' vs healthy ' + healthy.dPAO2);
 });
 
+check('switched-off node: frozen pleural pressure cuts the PEEP effect on cardiac output', () => {
+	const peepCO = freeze => {
+		const m = new PhysiologyModel();
+		if (freeze) m.setNodeEnabled('ppl', false);
+		const a = run(m, 5);
+		m.setVentilator({ PositiveEndExpiratoryPressure: 15 });
+		const b = run(m, 300);
+		return { dCO: a.co - b.co, pplA: a.pplMean, pplB: b.pplMean };
+	};
+	const free = peepCO(false), frozen = peepCO(true);
+	assert(Math.abs(frozen.pplB - frozen.pplA) < 1e-9, 'frozen Ppl moved ' + frozen.pplA + ' -> ' + frozen.pplB);
+	assert(frozen.dCO < free.dCO * 0.3, 'CO drop frozen ' + frozen.dCO + ' vs free ' + free.dCO);
+});
+
+check('switched-off node: frozen sympathetic tone removes the heart rate response to bleeding, and switching back on restores it', () => {
+	const m = new PhysiologyModel();
+	const hr0 = run(m, 5).hr;
+	assert(m.setNodeEnabled('symp', false));
+	m.hemorrhage(1000);
+	const blocked = run(m, 300);
+	assert(Math.abs(blocked.hr - hr0) < 0.5, 'HR moved with frozen symp: ' + hr0 + ' -> ' + blocked.hr);
+	assert(blocked.frozen.indexOf('symp') >= 0);
+	m.setNodeEnabled('symp', true);
+	const free = run(m, 300);
+	assert(free.hr > hr0 + 5, 'HR after switching back on ' + free.hr);
+});
+
+check('switched-off nodes: every freezable node can be frozen and the model stays finite', () => {
+	const { FREEZABLE } = require('../js/physiology.js');
+	FREEZABLE.forEach(id => {
+		const m = new PhysiologyModel({ conditions: ARDS });
+		m.setNodeEnabled(id, false);
+		m.setVentilator({ PositiveEndExpiratoryPressure: 14 });
+		const o = run(m, 60);
+		['co', 'map', 'pao2', 'paco2', 'spo2', 'ph', 'mpap', 'vt', 'pplat'].forEach(k => assert(isFinite(o[k]), id + ': ' + k + ' = ' + o[k]));
+	});
+});
+
 let failed = 0;
 for (const c of checks) {
 	try { c.fn(); console.log('ok   ' + c.name); }

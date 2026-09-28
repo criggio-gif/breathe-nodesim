@@ -280,8 +280,6 @@
 			this.nums = [];
 			this.signature = '';
 			this.onNavigate = null;
-			this.simple = false;
-			try { this.simple = localStorage.getItem('breathe-eq-simple') === '1'; } catch (e) { /* storage unavailable */ }
 			this.build();
 		}
 
@@ -294,7 +292,6 @@
 			el.innerHTML =
 				'<header class="eqv-head">' +
 				'<span class="eqv-dot"></span><div class="eqv-titles"><span class="eqv-kicker">Equazioni dal vivo</span><h2 class="eqv-title"></h2></div>' +
-				'<div class="eqv-mode" role="radiogroup" aria-label="Tipo di formula"><button type="button" data-simple="0" role="radio">Completa</button><button type="button" data-simple="1" role="radio">Semplificata</button></div>' +
 				'<button type="button" class="eqv-close" aria-label="Chiudi">×</button></header>' +
 				'<nav class="eqv-trail" aria-label="Percorso"></nav>' +
 				'<div class="eqv-body"></div>' +
@@ -306,8 +303,6 @@
 			this.body = el.querySelector('.eqv-body');
 			this.trailEl = el.querySelector('.eqv-trail');
 			el.querySelector('.eqv-close').addEventListener('click', () => this.close());
-			el.querySelectorAll('.eqv-mode button').forEach(b => b.addEventListener('click', () => this.setSimple(b.dataset.simple === '1')));
-			this.syncMode();
 			document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && !this.el.hidden) this.close(); });
 			this.makeDraggable(el.querySelector('.eqv-head'));
 		}
@@ -330,58 +325,6 @@
 		}
 
 		has(id) { return !!EQ[id]; }
-
-		//Simplified view: the one-line idea of the node with its live value, instead of the full equations
-		setSimple(on) {
-			this.simple = !!on;
-			try { localStorage.setItem('breathe-eq-simple', on ? '1' : '0'); } catch (e) { /* storage unavailable */ }
-			this.syncMode();
-			if (this.lastO) this.update(this.lastO, true);
-		}
-
-		syncMode() {
-			this.el.querySelectorAll('.eqv-mode button').forEach(b => {
-				const on = (b.dataset.simple === '1') === this.simple;
-				b.classList.toggle('on', on);
-				b.setAttribute('aria-checked', on);
-			});
-		}
-
-		renderSimple(o, frozen) {
-			const node = global.BreatheNodes.byId[this.nodeId];
-			this.body.innerHTML = '';
-			this.nums = []; this.blocks = [];
-			this.body.classList.toggle('frozen', frozen);
-			if (frozen) this.body.append(this.frozenBanner(o));
-			const block = document.createElement('div');
-			block.className = 'eq eq-simple';
-			const f = document.createElement('p');
-			f.className = 'eq-simple-f';
-			f.textContent = node.simple;
-			const v = document.createElement('p');
-			v.className = 'eq-simple-v';
-			v.innerHTML = '<span class="eq-var eq-result"></span> <span class="eq-op">=</span> <span class="eq-val eq-result"></span> <span class="eq-simple-u"></span>';
-			v.querySelector('.eq-var').textContent = node.labelFn ? node.labelFn(o) : node.label;
-			const valEl = v.querySelector('.eq-val');
-			valEl.textContent = fmt(global.BreatheNodes.nodeValue(node, o), node.dec);
-			v.querySelector('.eq-simple-u').textContent = node.unitFn ? node.unitFn(o) : node.unit;
-			this.nums.push({ el: valEl, target: global.BreatheNodes.nodeValue(node, o), d: node.dec });
-			const n = document.createElement('p');
-			n.className = 'eq-note';
-			n.textContent = node.desc;
-			block.append(f, v, n);
-			this.body.append(block);
-			this.blocks.push(block);
-		}
-
-		frozenBanner(o) {
-			const node = global.BreatheNodes.byId[this.nodeId];
-			const b = document.createElement('p');
-			b.className = 'eqv-frozen';
-			b.textContent = 'Nodo disattivato: il valore resta fisso a ' + fmt(global.BreatheNodes.nodeValue(node, o), node.dec) + ' ' +
-				(node.unitFn ? node.unitFn(o) : node.unit) + ' e non risente dei nodi a monte. Le equazioni qui sotto mostrano cosa varrebbe se fosse attivo.';
-			return b;
-		}
 
 		open(id, o, fromTrail) {
 			if (!EQ[id]) return;
@@ -424,21 +367,12 @@
 
 		//Rebuild when the structure changes (e.g. ventilation mode), otherwise only animate numbers
 		update(o, force) {
-			this.lastO = o;
 			if (this.el.hidden || !this.nodeId) return;
-			const frozen = !!(o.frozen && o.frozen.indexOf(this.nodeId) >= 0);
-			if (this.simple) {
-				const node = global.BreatheNodes.byId[this.nodeId];
-				const key = 'simple|' + frozen + '|' + this.nodeId;
-				if (force || key !== this.signature) { this.signature = key; this.renderSimple(o, frozen); }
-				else this.setNum(this.nums[0], global.BreatheNodes.nodeValue(node, o));
-				return;
-			}
 			const eqs = EQ[this.nodeId](o);
-			const sig = (frozen ? 'F' : '') + JSON.stringify(eqs, (k, v) => (k === 'v' ? undefined : v));
+			const sig = JSON.stringify(eqs, (k, v) => (k === 'v' ? undefined : v));
 			if (force || sig !== this.signature) {
 				this.signature = sig;
-				this.render(eqs, frozen, o);
+				this.render(eqs);
 				return;
 			}
 			let i = 0;
@@ -490,12 +424,10 @@
 			requestAnimationFrame(tick);
 		}
 
-		render(eqs, frozen, o) {
+		render(eqs) {
 			this.body.innerHTML = '';
 			this.nums = [];
 			this.blocks = [];
-			this.body.classList.toggle('frozen', !!frozen);
-			if (frozen) this.body.append(this.frozenBanner(o));
 			eqs.forEach(eq => {
 				const block = document.createElement('div');
 				block.className = 'eq';

@@ -95,24 +95,6 @@
 
 	function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
-	/*
-	 * Nodes that can be switched off ("frozen"). A frozen node keeps the value it had when it was
-	 * switched off: whatever happens upstream no longer reaches it, and the nodes downstream see a
-	 * constant. Each entry reads the internal value (model units) from an output snapshot.
-	 */
-	const FREEZE = {
-		vt: o => o.vt, autopeep: o => o.autoPeep, peeptot: o => o.peepTot, recruit: o => o.aeration / 100,
-		crs: o => o.crs, pplat: o => o.pplat, dp: o => o.dp, overdist: o => o.overdist / 100, mpaw: o => o.mpaw,
-		mp: o => o.mp, eelv: o => o.eelv, strain: o => o.strain, ppl: o => o.pplMean, ptp: o => o.ptp,
-		shunt: o => o.shunt / 100, vdvt: o => o.vdvt / 100, va: o => o.va, paco2: o => o.paco2, etco2: o => o.etco2,
-		pao2: o => o.pao2, spo2: o => o.spo2 / 100, pf: o => o.pf,
-		pmsf: o => o.pmsf, rap: o => o.rap, vrg: o => o.vrGradient, pvr: o => o.pvr, mpap: o => o.mpap,
-		rvfunc: o => o.rvFunc / 100, ppv: o => o.ppv, lvtm: o => o.lvTransmural, symp: o => o.symp / 100,
-		hr: o => o.hr, co: o => o.co, sv: o => o.sv, svr: o => o.svr, map: o => o.map,
-		hb: o => o.hb, cao2: o => o.cao2, do2: o => o.do2, vo2: o => o.vo2, svo2: o => o.svo2 / 100,
-		lactate: o => o.lactate, ph: o => o.ph
-	};
-
 	class PhysiologyModel {
 
 		constructor(opts) {
@@ -122,24 +104,7 @@
 			this.conditions = clone(opts.conditions || {});
 			this.actions = Object.assign({}, DEFAULT_ACTIONS, opts.actions || {});
 			this.override = null; // sustained inflation (recruitment maneuver)
-			this.frozen = {};     // switched-off nodes: node id -> value held (model units)
 			this.reset();
-		}
-
-		//Value of a quantity, or the value held if its node is switched off
-		fz(id, value) {
-			const f = this.frozen[id];
-			return f === undefined ? value : f;
-		}
-
-		canFreeze(id) { return id in FREEZE; }
-
-		//Switch a node off (it keeps its current value) or back on. Returns false if the node cannot be switched off.
-		setNodeEnabled(id, enabled) {
-			if (!(id in FREEZE)) return false;
-			if (enabled) delete this.frozen[id];
-			else this.frozen[id] = FREEZE[id](this.out);
-			return true;
 		}
 
 		/*
@@ -147,7 +112,6 @@
 		 */
 		reset() {
 			this.t = 0;
-			this.frozen = {};
 			this.S = {
 				open: 0.5,      // fraction of recruitable lung that is open at end-expiration
 				symp: 0,        // sympathetic tone (baroreflex / chemoreflex)
@@ -245,8 +209,6 @@
 			const openCycleMax = Math.max(S.open, m.openInsp);
 			m.aerExp = 1 - m.consolidated - m.recruitable * (1 - S.open);
 			m.aerInsp = 1 - m.consolidated - m.recruitable * (1 - openCycleMax);
-			m.aerExp = this.fz('recruit', m.aerExp);
-			m.aerInsp = Math.max(m.aerInsp, m.aerExp);
 			m.tidalRecruit = m.recruitable * (openCycleMax - S.open);
 
 			//Aerated ("baby") lung pressure-volume curve (Salazar-Knowles) + linear chest wall
@@ -309,8 +271,7 @@
 					let peepi = 0, vt = 0, pplat = peepSet, crs = this.prev.crs || 50, ppeak = peepSet, vpeep = vpeepSet;
 					let vstatLast = 0, teffLast = ti, xLast = 0, vtrapLast = 0;
 					for (let it = 0; it < 8; it++) {
-						peepi = this.fz('autopeep', peepi);
-						const peepTot = this.fz('peeptot', peepSet + peepi);
+						const peepTot = peepSet + peepi;
 						vpeep = vOfPaw(peepTot);
 						const tau = m.raw * crs / 1000;
 						if (v.mode === 'VC') {
@@ -334,12 +295,7 @@
 							pplat = pawOfV(vpeep + vt);
 							ppeak = peepSet + v.DeltaPressureSupport;
 						}
-						//switched-off nodes along the chain VT -> Crs -> Pplat
-						if ('vt' in this.frozen) { vt = this.frozen.vt; pplat = pawOfV(vpeep + vt); }
-						if ('crs' in this.frozen) pplat = peepTot + vt / this.frozen.crs;
-						pplat = this.fz('pplat', pplat);
-						if (v.mode === 'VC') ppeak = pplat + m.raw * v.Flow / 60;
-						crs = this.fz('crs', vt > 1 ? vt / Math.max(0.5, pplat - peepTot) : crs);
+						crs = vt > 1 ? vt / Math.max(0.5, pplat - peepTot) : crs;
 						const tauN = m.raw * crs / 1000;
 						const x = Math.exp(-te / Math.max(tauN, 0.01));
 						const vtrap = vt * x / (1 - x);
@@ -347,9 +303,8 @@
 						xLast = x; vtrapLast = vtrap;
 					}
 					const tau = m.raw * crs / 1000;
-					peepi = this.fz('autopeep', peepi);
 					Object.assign(m, { mode: v.mode, rr, ti, te, ttot, vt, pplat, ppeak, crs, tau, vpeep, vpeepSet,
-						autoPeep: peepi, peepTot: this.fz('peeptot', peepSet + peepi),
+						autoPeep: peepi, peepTot: peepSet + peepi,
 						vstat: vstatLast, teff: teffLast, expTe: xLast, vtrap: vtrapLast, leak, flowLs: v.Flow / 60 });
 
 					//One breath with a linear RC model around the operating point: waveforms, means, power
@@ -401,20 +356,13 @@
 				}
 			}
 
-			//switched-off nodes: the values handed to circulation and gas exchange
-			m.mpaw = this.fz('mpaw', m.mpaw);
-			m.pplMean = this.fz('ppl', m.pplMean);
-			m.ptpMean = m.mpaw - m.pplMean;
-			m.ptp = this.fz('ptp', m.ptp);
-			m.mp = this.fz('mp', m.mp);
-
 			//Aerated FRC (supine, ZEEP) and global strain as defined by Chiumello (VT + V_PEEP) / FRC
 			m.frc = 25 * d.pbw * m.aerExp * (1 + 0.4 * d.copdE);
-			m.eelv = this.fz('eelv', m.frc + m.vpeep);
-			m.strain = this.fz('strain', (m.vt + m.vpeep) / m.frc);
+			m.eelv = m.frc + m.vpeep;
+			m.strain = (m.vt + m.vpeep) / m.frc;
 			m.fillInsp = (m.vpeep + m.vt) / vmax;
-			m.overdist = this.fz('overdist', clamp((m.fillInsp - 0.55) / 0.35, 0, 1));
-			m.dp = this.fz('dp', m.pplat - m.peepTot);
+			m.overdist = clamp((m.fillInsp - 0.55) / 0.35, 0, 1);
+			m.dp = m.pplat - m.peepTot;
 			return m;
 		}
 
@@ -432,8 +380,8 @@
 			h.ppc = d.effusion > 100 ? 2 * (Math.exp((d.effusion - 100) / 300) - 1) : 0;
 
 			//Mean systemic filling pressure: stressed volume, venoconstriction, abdominal transmission of PEEP
-			h.pmsf = this.fz('pmsf', Math.max(2, 12 + (volemia - 1) * d.bv / (2.8 * P.Weight) + 3 * d.lvd + 3.5 * S.symp
-				+ 0.3 * Math.max(0, pplMean - ppl0mm)));
+			h.pmsf = Math.max(2, 12 + (volemia - 1) * d.bv / (2.8 * P.Weight) + 3 * d.lvd + 3.5 * S.symp
+				+ 0.3 * Math.max(0, pplMean - ppl0mm));
 			const rvr = 7.4 / d.co0;
 			h.rvr = rvr;
 
@@ -461,11 +409,7 @@
 			};
 			const mean = solve(pplMean);
 			h.rap = mean.rap; h.co = mean.co;
-			//switched-off nodes: cardiac output then follows venous return, (Pmsf - RAP) / RVR
-			if ('rap' in this.frozen) { h.rap = this.frozen.rap; h.co = Math.max(0.2, (h.pmsf - Math.max(h.rap, 0)) / rvr); }
-			h.vrGradient = this.fz('vrg', h.pmsf - Math.max(h.rap, 0));
-			if ('vrg' in this.frozen) h.co = Math.max(0.2, h.vrGradient / rvr);
-			h.co = this.fz('co', h.co);
+			h.vrGradient = h.pmsf - Math.max(h.rap, 0);
 			h.preloadSlope = mean.slope;
 
 			//Pulse pressure variation: tidal swing of pleural pressure times the slope of the Starling curve
@@ -475,7 +419,6 @@
 				h.ppv = clamp(2 + 10 * swing * mean.slope / h.co, 0, 45);
 				h.swing = swing;
 			} else h.ppv = 2;
-			h.ppv = this.fz('ppv', h.ppv);
 
 			h.pawp = pplMean + (h.rap - pplMean - h.ppc) * 1.1 + 2 + 12 * d.lvd + h.ppc;
 
@@ -486,7 +429,7 @@
 			const hpv = 1 + 0.5 * clamp((40 - prev.pvo2) / 15, 0, 1) + 0.6 * clamp((70 - prev.pao2) / 30, 0, 1);
 			const acid = 1 + 1.5 * clamp(7.38 - prev.ph, 0, 0.4);
 			const disease = 1 + 0.7 * d.ards + 0.8 * d.fib + 0.3 * d.copdE;
-			h.pvr = this.fz('pvr', 1.6 * (5.9 / d.co0) * lowVol * highVol * hpv * acid * disease);
+			h.pvr = 1.6 * (5.9 / d.co0) * lowVol * highVol * hpv * acid * disease;
 			Object.assign(h, { pvr0: 1.6 * (5.9 / d.co0), pvrLow: lowVol, pvrHigh: highVol, pvrHpv: hpv, pvrAcid: acid, pvrDisease: disease });
 			//West zones (vascular waterfall). Along the supine lung height (~19 cm = 14 mmHg of hydrostatic
 			//gradient, left atrium at mid height) the capillary outflow pressure is the higher of local venous
@@ -499,22 +442,22 @@
 			h.zone12 = clamp((D + H / 2) / H, 0, 1);
 			h.waterfall = D <= -H / 2 ? 0 : D >= H / 2 ? D : Math.pow(D + H / 2, 2) / (2 * H);
 			h.pOut = h.pawp + h.waterfall;
-			h.mpap = this.fz('mpap', h.pOut + h.co * h.pvr);
+			h.mpap = h.pOut + h.co * h.pvr;
 
 			//Systemic circulation
 			const svr0 = (d.map0 - rapRef) / d.co0;
 			h.svrAcid = 1 - 0.8 * clamp(7.3 - prev.ph, 0, 0.3);
 			h.svr0 = svr0;
-			h.svr = this.fz('svr', svr0 * (1 + 0.4 * S.symp) * h.svrAcid);
-			h.map = this.fz('map', h.co * h.svr + h.rap);
+			h.svr = svr0 * (1 + 0.4 * S.symp) * h.svrAcid;
+			h.map = h.co * h.svr + h.rap;
 			h.hr = S.hr;
-			h.sv = this.fz('sv', h.co / S.hr * 1000);
+			h.sv = h.co / S.hr * 1000;
 			const sv0 = d.co0 / P.HeartRateBaseline * 1000;
 			const cart = sv0 / (P.SystolicArterialPressureBaseline - P.DiastolicArterialPressureBaseline);
 			const pp = h.sv / cart;
 			h.sbp = h.map + 2 * pp / 3;
 			h.dbp = h.map - pp / 3;
-			h.lvTransmural = this.fz('lvtm', h.sbp - pplMean);
+			h.lvTransmural = h.sbp - pplMean;
 			return h;
 		}
 
@@ -534,12 +477,12 @@
 			g.pAO2 = S.pAO2;
 
 			const nonAerMean = m.mode === 'SI' ? 1 - m.aerExp : 1 - 0.6 * m.aerExp - 0.4 * m.aerInsp;
-			g.shunt = this.fz('shunt', clamp(0.02 + nonAerMean * 0.7 * Math.pow(h.co / d.co0, 0.35) + 0.35 * d.shuntSev
-				+ 0.15 * m.overdist * nonAerMean, 0.02, 0.75));
+			g.shunt = clamp(0.02 + nonAerMean * 0.7 * Math.pow(h.co / d.co0, 0.35) + 0.35 * d.shuntSev
+				+ 0.15 * m.overdist * nonAerMean, 0.02, 0.75);
 			g.lowVQ = clamp(0.03 + 0.25 * d.copdB + 0.2 * d.copdE + 0.15 * d.pneu + 0.1 * d.ards
 				+ 0.25 * A['Bronchoconstriction'], 0, 0.5);
-			g.hb = this.fz('hb', d.hb0 * S.hbDil);
-			g.vo2 = this.fz('vo2', d.vo2 * (1 + 0.12 * Math.max(0, S.symp)) + 25 * (1 - clamp(this.patient.Sedation, 0, 1)));
+			g.hb = d.hb0 * S.hbDil;
+			g.vo2 = d.vo2 * (1 + 0.12 * Math.max(0, S.symp)) + 25 * (1 - clamp(this.patient.Sedation, 0, 1));
 
 			let pvo2 = prev.pvo2, ca = 18, cv = 13, vo2eff = g.vo2;
 			const cc = o2Content(g.pAO2, g.hb);
@@ -558,25 +501,12 @@
 				vo2eff = (ca - cv) * 10 * h.co;
 				pvo2 = po2FromContent(cv, g.hb);
 			}
-			//switched-off nodes along venous blood -> arterial content: rebuild CaO2 and CvO2 from the held values
-			const fr = this.frozen;
-			if ('svo2' in fr || 'pao2' in fr || 'spo2' in fr || 'cao2' in fr) {
-				const avd = g.vo2 / (10 * h.co);
-				const q = g.lowVQ, sh = g.shunt;
-				if ('svo2' in fr) { cv = 1.34 * g.hb * fr.svo2 + 0.003 * pvo2; ca = (1 - sh - q) * cc + q * (g.clow || cc) + sh * cv; }
-				if ('pao2' in fr) ca = o2Content(fr.pao2, g.hb);
-				if ('spo2' in fr) ca = 1.34 * g.hb * fr.spo2 + 0.003 * ('pao2' in fr ? fr.pao2 : 90);
-				if ('cao2' in fr) ca = fr.cao2;
-				if (!('svo2' in fr)) cv = Math.max(0.2 * ca, ca - avd);
-				vo2eff = (ca - cv) * 10 * h.co;
-				pvo2 = po2FromContent(cv, g.hb);
-			}
 			g.cao2 = ca; g.cvo2 = cv; g.pvo2 = pvo2; g.vo2eff = vo2eff; g.cc = cc;
 			g.nonAerMean = nonAerMean;
-			g.pao2 = this.fz('pao2', po2FromContent(ca, g.hb));
+			g.pao2 = po2FromContent(ca, g.hb);
 			g.sao2 = satFromPO2(g.pao2);
-			g.svo2 = this.fz('svo2', satFromPO2(pvo2));
-			g.do2 = this.fz('do2', h.co * ca * 10);
+			g.svo2 = satFromPO2(pvo2);
+			g.do2 = h.co * ca * 10;
 			g.o2er = vo2eff / g.do2;
 			g.fio2 = fio2;
 
@@ -588,12 +518,10 @@
 				+ 0.25 * clamp(1 - h.co / d.co0, 0, 1) + zone1, 0, 0.8);
 			const vtAlv = Math.max(0, m.vt - g.vdAnat);
 			g.va = m.rr * vtAlv * (1 - g.vdAlvFrac) / 1000;
-			if ('vdvt' in this.frozen) g.va = m.rr * m.vt * (1 - this.frozen.vdvt) / 1000;
-			g.va = this.fz('va', g.va);
 			g.ve = m.rr * m.vt / 1000;
-			g.vdvt = this.fz('vdvt', m.vt > 0 ? clamp(1 - g.va * 1000 / (m.rr * m.vt), 0, 1) : 1);
+			g.vdvt = m.vt > 0 ? clamp(1 - g.va * 1000 / (m.rr * m.vt), 0, 1) : 1;
 			g.vco2 = 0.8 * g.vo2;
-			g.etco2 = this.fz('etco2', m.rr > 0 ? paco2 * (1 - g.vdAlvFrac) * (1 - 0.1 * g.shunt) : 0);
+			g.etco2 = m.rr > 0 ? paco2 * (1 - g.vdAlvFrac) * (1 - 0.1 * g.shunt) : 0;
 			return g;
 		}
 
@@ -661,7 +589,7 @@
 			const e = (d.map0 - h.map) / d.map0;
 			const chemo = 0.6 * clamp((65 - g.pao2) / 30, 0, 1) + 0.4 * clamp((S.paco2 - 50) / 30, 0, 1);
 			const sympTarget = clamp(5 * e + chemo + (d.A['Acute Stress'] || 0), -0.6, 1.8);
-			S.symp = this.fz('symp', relax(S.symp, sympTarget, dt, 10));
+			S.symp = relax(S.symp, sympTarget, dt, 10);
 			const hrTarget = clamp(P.HeartRateBaseline * (1 + 0.5 * S.symp), 35, 180);
 
 			//Right ventricle - pulmonary artery coupling. RV afterload is the effective arterial elastance
@@ -672,21 +600,21 @@
 			const eesI = EES_RV_INDEXED;
 			const coupling = eesI / eaI;
 			const rvTarget = coupling >= 1.2 ? 1 : Math.max(0.5, 1 / (1 + Math.pow(1.2 - coupling, 2)));
-			S.rvFunc = this.fz('rvfunc', relax(S.rvFunc, rvTarget, dt, 4));
-			S.hr = this.fz('hr', relax(S.hr, hrTarget, dt, 5));
+			S.rvFunc = relax(S.rvFunc, rvTarget, dt, 4);
+			S.hr = relax(S.hr, hrTarget, dt, 5);
 
 			//CO2 stores
 			const elim = g.va * S.paco2 / 0.863; // mL/min
-			S.paco2 = this.fz('paco2', clamp(S.paco2 + (g.vco2 - elim) / 25 * dt / 60, 10, 150));
+			S.paco2 = clamp(S.paco2 + (g.vco2 - elim) / 25 * dt / 60, 10, 150);
 
 			//Pulse oximeter lag
-			S.spo2 = this.fz('spo2', relax(S.spo2, g.sao2, dt, 8));
+			S.spo2 = relax(S.spo2, g.sao2, dt, 8);
 
 			//Lactate (oxygen debt)
 			const lacTarget = 1 + 18 * Math.max(0, g.o2er - 0.45) + 0.08 * Math.max(0, 60 - h.map);
-			S.lactate = this.fz('lactate', relax(S.lactate, lacTarget, dt, 240));
+			S.lactate = relax(S.lactate, lacTarget, dt, 240);
 			const hco3 = 24 - (S.lactate - 1) + 0.1 * (S.paco2 - 40);
-			const ph = this.fz('ph', 6.1 + Math.log10(hco3 / (0.03 * S.paco2)));
+			const ph = 6.1 + Math.log10(hco3 / (0.03 * S.paco2));
 
 			const prevUsed = { mpap: this.prev.mpap, ph: this.prev.ph, pao2: this.prev.pao2, pvo2: this.prev.pvo2 };
 			this.t += dt;
@@ -696,11 +624,10 @@
 				t: this.t,
 				mode: m.mode,
 				override: this.override ? Object.assign({}, this.override) : null,
-				frozen: Object.keys(this.frozen),
 				//ventilator & patient inputs
 				peepSet: v.PositiveEndExpiratoryPressure,
 				vtSet: v.TidalVolume, pinsp: v.InspiratoryPressure, ps: v.DeltaPressureSupport,
-				slope: v.Slope, flowSet: v.Flow, rrSet: v.RespirationRate, rr: m.rr, ti: m.ti, te: m.te, ie: m.te > 0 ? m.ti / m.te : 0,
+				rrSet: v.RespirationRate, rr: m.rr, ti: m.ti, te: m.te, ie: m.te > 0 ? m.ti / m.te : 0,
 				fio2: g.fio2, raw: m.raw, ccw: m.ccw, volemia: h.volemia * 100, contract: (1 - 0.5 * d.lvd) * 100,
 				sedation: P.Sedation, pbw: d.pbw, bmi: d.bmi, bsa: d.bsa,
 				//mechanics
@@ -711,7 +638,7 @@
 				pplMean: m.pplMean, pplEE: m.pplEE, pplEI: m.pplEI, ptp: m.ptp, pOpen: m.pOpen, pClose: m.pClose,
 				//gas exchange
 				shunt: g.shunt * 100, lowVQ: g.lowVQ * 100, vdvt: g.vdvt * 100, va: g.va, ve: g.ve,
-				paco2: S.paco2, etco2: g.etco2, pAO2: g.pAO2, pao2: g.pao2, pf: this.fz('pf', g.pao2 / g.fio2),
+				paco2: S.paco2, etco2: g.etco2, pAO2: g.pAO2, pao2: g.pao2, pf: g.pao2 / g.fio2,
 				spo2: S.spo2 * 100, sao2: g.sao2 * 100,
 				//hemodynamics
 				pmsf: h.pmsf, rap: h.rap, vrGradient: h.vrGradient, pvr: h.pvr, pvrDyn: h.pvr * 80, mpap: h.mpap,
@@ -752,7 +679,7 @@
 		}
 	}
 
-	const api = { PhysiologyModel, FREEZABLE: Object.keys(FREEZE), DEFAULT_PATIENT, DEFAULT_VENTILATOR, DEFAULT_ACTIONS, satFromPO2, o2Content,
+	const api = { PhysiologyModel, DEFAULT_PATIENT, DEFAULT_VENTILATOR, DEFAULT_ACTIONS, satFromPO2, o2Content,
 		po2FromContent, CMH2O_TO_MMHG };
 	if (typeof module !== 'undefined' && module.exports) module.exports = api;
 	else global.BreathePhysiology = api;
