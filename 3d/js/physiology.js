@@ -428,7 +428,18 @@
 			const disease = 1 + 0.7 * d.ards + 0.8 * d.fib + 0.3 * d.copdE;
 			h.pvr = 1.6 * (5.9 / d.co0) * lowVol * highVol * hpv * acid * disease;
 			Object.assign(h, { pvr0: 1.6 * (5.9 / d.co0), pvrLow: lowVol, pvrHigh: highVol, pvrHpv: hpv, pvrAcid: acid, pvrDisease: disease });
-			h.mpap = h.pawp + h.co * h.pvr;
+			//West zones (vascular waterfall). Along the supine lung height (~19 cm = 14 mmHg of hydrostatic
+			//gradient, left atrium at mid height) the capillary outflow pressure is the higher of local venous
+			//and alveolar pressure; averaged over the height, the effective downstream pressure is PAWP plus an
+			//excess that is 0 while the whole lung is in zone 3 and grows as zone 2 spreads.
+			const H = 14;
+			const palv = m.mpaw * CMH2O_TO_MMHG;
+			const D = palv - h.pawp;
+			h.palv = palv;
+			h.zone12 = clamp((D + H / 2) / H, 0, 1);
+			h.waterfall = D <= -H / 2 ? 0 : D >= H / 2 ? D : Math.pow(D + H / 2, 2) / (2 * H);
+			h.pOut = h.pawp + h.waterfall;
+			h.mpap = h.pOut + h.co * h.pvr;
 
 			//Systemic circulation
 			const svr0 = (d.map0 - rapRef) / d.co0;
@@ -613,6 +624,7 @@
 					ptm: h.rap - h.pplMean - h.ppc, slope: h.preloadSlope, swing: h.swing || 0,
 					pvrWU: h.pvr, pvr0: h.pvr0, pvrLow: h.pvrLow, pvrHigh: h.pvrHigh, pvrHpv: h.pvrHpv, pvrAcid: h.pvrAcid, pvrDisease: h.pvrDisease,
 					svrWU: h.svr, svr0: h.svr0, svrAcid: h.svrAcid, sympTarget, chemo, baroError: e,
+					palv: h.palv, zone12: h.zone12, waterfall: h.waterfall, pOut: h.pOut, hydroSpan: 14, lapTm: h.pawp - h.pplMean,
 					lacTarget, prevMpap: prevUsed.mpap, prevPh: prevUsed.ph, prevPao2: prevUsed.pao2, prevPvo2: prevUsed.pvo2
 				}
 			};
