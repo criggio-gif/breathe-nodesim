@@ -57,12 +57,17 @@
 		raw: o => [
 			E(V('Raw', o.raw, 1, 'raw'), [K(9), '·', '(', K(1), '+', K(2.5), '·', V('bronchite', o.x.copdB, 2), '+', K(0.8), '·', V('enfisema', o.x.copdE, 2), '+', K(3), '·', V('broncocostr', o.x.bronch, 2), ')', '+', K(30), '·', V('ostruzione', o.x.obstr, 2)])
 		],
+		iap: o => [
+			E(V('IAP', o.iap, 0, 'iap'), [V('impostata', o.iap, 0)], 'Normale in terapia intensiva 5–7 mmHg; ipertensione addominale da 12 mmHg. Sopra 7 mmHg irrigidisce la parete toracica, alza la pressione pleurica e comprime le basi polmonari (ARDS "extrapolmonare").')
+		],
 		ccw: o => [
-			E(V('Ccw', o.ccw, 0, 'ccw'), [F([K(180)], [K(1), '+', K(0.8), '·', V('obesità', o.x.obes, 2)])], 'obesità = (BMI − 25)/15, limitata a 0–1,5')
+			E(V('Ccw', o.ccw, 0, 'ccw'), [F([K(o.x.cal.ccw0)], ['(', K(1), '+', K(0.8), '·', V('obesità', o.x.obes, 2), ')', '·', '(', K(1), '+', K(0.05), '·', V('IAP − 7', o.x.iapX, 1, 'iap'), ')'])],
+				'obesità = (BMI − 25)/15, limitata a 0–1,5. La pressione intra-addominale sopra 7 mmHg irrigidisce la parete toracica.')
 		],
 		lungdz: o => [
-			E(V('reclutabile', o.x.recruitable, 2, 'lungdz'), [K(0.03), '+', K(0.45), '·', V('ARDS', o.x.ards, 2), '+', K(0.15), '·', V('polmonite', o.x.pneu, 2), '+', K(0.08), '·', V('obesità', o.x.obes, 2)]),
-			E(V('consolidato', o.x.consolidated, 2), [K(0.2), '·', V('ARDS', o.x.ards, 2), '+', K(0.35), '·', V('polmonite', o.x.pneu, 2)])
+			E(V('reclutabile', o.x.recruitable, 2, 'lungdz'), [K(0.03), '+', K(o.x.cal.recrArds), '·', V('ARDS', o.x.ards, 2), '+', K(0.15), '·', V('polmonite', o.x.pneu, 2), '+', K(0.08), '·', V('obesità', o.x.obes, 2), '+', K(0.006, 3), '·', V('IAP − 7', o.x.iapX, 1, 'iap')],
+				'Calibrato su Gattinoni 2006: reclutabile in media 13 ± 11% del polmone, non reclutabile circa 24%.'),
+			E(V('consolidato', o.x.consolidated, 2), [K(o.x.cal.consArds), '·', V('ARDS', o.x.ards, 2), '+', K(0.35), '·', V('polmonite', o.x.pneu, 2)])
 		],
 		volemia: o => [
 			E(V('Volemia', o.volemia / 100, 2, 'volemia'), [V('impostata', o.x.volemiaSet, 2), '+', F([V('ΔV', o.x.fluid, 0)], [V('VS', o.x.bv, 0)])], 'ΔV: fluidi infusi (60% intravascolare) o sangue perso; VS = 70 mL/kg.')
@@ -88,8 +93,8 @@
 		],
 		recruit: o => [
 			E(V('Aerazione', o.x.aerExp, 2, 'recruit'), [K(1), '−', V('consolid', o.x.consolidated, 2, 'lungdz'), '−', V('reclutab', o.x.recruitable, 2, 'lungdz'), '·', '(', K(1), '−', V('aperto', o.x.open, 2), ')']),
-			E(V('si apre', o.x.openInsp, 2), ['Φ', '(', F([V('Pplat', o.pplat, 1, 'pplat'), '−', V('Popen', o.x.pOpen, 1)], [K(5)]), ')'], 'Frazione di unità reclutabili la cui pressione di apertura è superata a fine inspirazione.'),
-			E(V('resta aperto', o.x.keep, 2), ['Φ', '(', F([V('PEEPtot', o.peepTot, 1, 'peeptot'), '−', V('Pclose', o.x.pClose, 1)], [K(3.5)]), ')'], 'Isteresi: "aperto" tende a min(si apre, resta aperto) in ~5 s e collassa verso "resta aperto" in ~40 s.')
+			E(V('si apre', o.x.openInsp, 2), ['Φ', '(', F([V('Pplat', o.pplat, 1, 'pplat'), '−', V('Popen', o.x.pOpen, 1)], [K(o.x.cal.sdOpen)]), ')'], 'Frazione di unità reclutabili la cui pressione di apertura è superata a fine inspirazione. Pressioni di apertura e chiusura come in Crotti 2001 (mode circa 20 e 5 cmH₂O, apertura molto dispersa).'),
+			E(V('resta aperto', o.x.keep, 2), ['Φ', '(', F([V('PEEPtot', o.peepTot, 1, 'peeptot'), '−', V('Pclose', o.x.pClose, 1)], [K(o.x.cal.sdClose)]), ')'], 'Isteresi: "aperto" tende a min(si apre, resta aperto) in ~5 s e collassa verso "resta aperto" in ~40 s.')
 		],
 		crs: o => [
 			E(V('Crs', o.crs, 1, 'crs'), [F([V('VT', o.vt, 0, 'vt')], [V('Pplat', o.pplat, 1, 'pplat'), '−', V('PEEPtot', o.peepTot, 1, 'peeptot')])], 'Pplat deriva dalla curva P-V esponenziale del polmone aerato, che si allarga quando si recluta.')
@@ -117,12 +122,14 @@
 		],
 		eelv: o => [
 			E(V('EELV', o.eelv, 0, 'eelv'), [V('CFR aerata', o.x.frc, 0), '+', V('V_PEEP', o.x.vpeep, 0)]),
-			E(V('CFR aerata', o.x.frc, 0), [K(25), '·', V('PBW', o.pbw, 0), '·', V('aerazione', o.x.aerExp, 2, 'recruit'), '·', '(', K(1), '+', K(0.4), '·', V('enfisema', o.x.copdE, 2), ')'])
+			E(V('CFR aerata', o.x.frc, 0), [F([K(25), '·', V('PBW', o.pbw, 0), '·', V('aerazione', o.x.aerExp, 2, 'recruit'), '·', '(', K(1), '+', K(0.4), '·', V('enfisema', o.x.copdE, 2), ')'],
+				[K(1), '+', K(o.x.cal.obesFrc), '·', V('obesità', o.x.obes, 2), '+', K(0.02), '·', V('IAP − 7', o.x.iapX, 1, 'iap')])], 'Supino e sedato: obesità e addome teso riducono la capacità funzionale residua.')
 		],
 		strain: o => [
 			E(V('strain', o.strain, 2, 'strain'), [F([V('VT', o.vt, 0, 'vt'), '+', V('V_PEEP', o.x.vpeep, 0)], [V('CFR aerata', o.x.frc, 0)])])
 		],
 		ppl: o => [
+			E(V('Ppl₀', o.x.ppl0, 1), [K(3), '+', K(4), '·', V('obesità', o.x.obes, 2), '+', K(0.4), '·', V('IAP − 7', o.x.iapX, 1, 'iap')], 'Pressione pleurica a fine espirazione in ZEEP, supino: circa il 30% della pressione addominale in eccesso arriva alla pleura.'),
 			E(V('Ppl', o.pplMean, 1, 'ppl'), [V('Ppl₀', o.x.ppl0, 1), '+', F([V('V̄', o.x.vMeanAbove, 0)], [V('Ccw', o.ccw, 0, 'ccw')]), '−', V('P̄mus', o.x.pmusMean, 1)],
 				'V̄: volume medio sopra la CFR nel ciclo. La parete toracica converte il volume in pressione pleurica.')
 		],
@@ -145,7 +152,7 @@
 			E(V('VA', o.va, 2, 'va'), [V('FR', o.rr, 0, 'rr'), '·', '(', V('VT', o.vt, 0, 'vt'), '−', V('VD anat', o.x.vdAnat, 0), ')', '·', '(', K(1), '−', V('VD alv', o.x.vdAlv, 2, 'vdvt'), ')', '/', K(1000)])
 		],
 		paco2: o => [
-			E(V('dPaCO₂/dt', o.x.dPaco2PerMin, 2), [F([V('VCO₂', o.x.vco2, 0), '−', V('VA', o.va, 2, 'va'), '·', V('PaCO₂', o.paco2, 1, 'paco2'), '/', K(0.863)], [K(25)])],
+			E(V('dPaCO₂/dt', o.x.dPaco2PerMin, 2), [F([V('VCO₂', o.x.vco2, 0), '−', V('VA', o.va, 2, 'va'), '·', V('PaCO₂', o.paco2, 1, 'paco2'), '/', K(0.863)], [K(o.x.cal.co2Store)])],
 				'mmHg/min: produzione meno eliminazione di CO₂, divise per i depositi corporei (25 mL/mmHg). Positivo = la PaCO₂ sta salendo.'),
 			E(V('PaCO₂ equilibrio', o.va > 0 ? 0.863 * o.x.vco2 / o.va : NaN, 0), [F([K(0.863), '·', V('VCO₂', o.x.vco2, 0)], [V('VA', o.va, 2, 'va')])], 'Valore verso cui tende la PaCO₂ se la ventilazione non cambia.')
 		],
@@ -167,8 +174,8 @@
 
 		/* ------------------------------------------------------- hemodynamics */
 		pmsf: o => [
-			E(V('Pmsf', o.pmsf, 1, 'pmsf'), [K(12), '+', '(', V('volemia', o.volemia / 100, 2, 'volemia'), '−', K(1), ')', '·', F([V('VS', o.x.bv, 0)], [K(2.8), '·', V('peso', o.x.weight, 0)]), '+', K(3), '·', V('LVD', o.x.lvd, 2),
-				'+', K(3.5), '·', V('simpatico', o.symp / 100, 2, 'symp'), '+', K(0.3), '·', 'max', '(', K(0), ',', V('Ppl', o.pplMeanMmHg, 1, 'ppl'), '−', V('Ppl₀', o.x.ppl0 * MM, 1), ')'],
+			E(V('Pmsf', o.pmsf, 1, 'pmsf'), [K(o.x.cal.pmsf0), '+', '(', V('volemia', o.volemia / 100, 2, 'volemia'), '−', K(1), ')', '·', F([V('VS', o.x.bv, 0)], [K(2.8), '·', V('peso', o.x.weight, 0)]), '+', K(3), '·', V('LVD', o.x.lvd, 2),
+				'+', K(3.5), '·', V('simpatico', o.symp / 100, 2, 'symp'), '+', K(o.x.cal.pmsfPpl), '·', 'max', '(', K(0), ',', V('Ppl', o.pplMeanMmHg, 1, 'ppl'), '−', V('Ppl₀', o.x.ppl0 * MM, 1), ')'],
 				'mmHg. L\'ultimo termine è la compressione addominale da parte della PEEP (compenso parziale).')
 		],
 		rap: o => EQ.co(o),
@@ -208,7 +215,7 @@
 			];
 		},
 		ppv: o => [
-			E(V('PPV', o.ppv, 1, 'ppv'), [K(2), '+', K(10), '·', F([V('ΔPpl tidal', o.x.swing, 2, 'ppl'), '·', V('pendenza Starling', o.x.slope, 2)], [V('GC', o.co, 2, 'co')])],
+			E(V('PPV', o.ppv, 1, 'ppv'), [K(2), '+', K(o.x.cal.ppvGain), '·', F([V('ΔPpl tidal', o.x.swing, 2, 'ppl'), '·', V('pendenza Starling', o.x.slope, 2)], [V('GC', o.co, 2, 'co')])],
 				'La pendenza è dGC/dPVC al punto di lavoro: alta nel paziente precarico-dipendente (ipovolemia).')
 		],
 		lvtm: o => [

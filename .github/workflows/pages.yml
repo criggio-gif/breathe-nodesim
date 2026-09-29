@@ -27,6 +27,7 @@ jobs:
       - run: node test/physiology.test.js
       - run: node test/equations.test.js
       - run: node test/console.test.js
+      - run: node test/literature.test.js
 
   deploy:
     needs: test

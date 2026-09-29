@@ -153,11 +153,11 @@ check('alveolar O2 store: losing ventilation desaturates, faster with a small AR
 		m.setVentilator({ FractionInspiredOxygen: 0.4, PositiveEndExpiratoryPressure: 8 });
 		const before = run(m, 600);
 		m.setAction('Ventilator Leak', 1);
-		const after = run(m, 120);
+		const after = run(m, 180);
 		return { before, after, dPAO2: before.pAO2 - after.pAO2 };
 	};
 	const healthy = fall(null), ards = fall(ARDS);
-	assert(ards.after.spo2 < 90, 'ARDS SpO2 after 2 min of leak ' + ards.after.spo2);
+	assert(ards.after.spo2 < 90, 'ARDS SpO2 after 3 min of leak ' + ards.after.spo2);
 	assert(ards.after.spo2 < ards.before.spo2 - 5, 'ARDS SpO2 ' + ards.before.spo2 + ' -> ' + ards.after.spo2);
 	assert(ards.dPAO2 > healthy.dPAO2, 'PAO2 fall ARDS ' + ards.dPAO2 + ' vs healthy ' + healthy.dPAO2);
 });

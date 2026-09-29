@@ -253,6 +253,13 @@
 			out.push({ action: 'Scenario: ' + API.scenarios().find(x => x.id === s[1]).label });
 			return true;
 		}
+		if (/pressione (intra-?)?addominale|\biap\b|addome teso|ipertensione addominale/.test(t)) {
+			const m = t.match(/(\d+(?:[.,]\d+)?)/);
+			const v = m ? num(m[1]) : 20;
+			const r = API.setPatient({ IntraAbdominalPressure: v });
+			out.push({ action: 'Pressione intra-addominale ' + r.patient.IntraAbdominalPressure + ' mmHg' });
+			return true;
+		}
 		if (/sedaz|sedat/.test(t)) {
 			const v = severityOf(t);
 			if (v === undefined) return false;
@@ -323,7 +330,7 @@
 		'- **Ventilatore**: PEEP 12 · FiO2 60% · VT 450 · FR 20 · Ti 1 · flusso 50 · Pinsp 25 · PS 10 · VC / PC / CPAP · aumenta la PEEP di 2',
 		'- **Manovre**: reclutamento 40 cmH2O per 30 s · titolazione PEEP · bolo 500 mL · emorragia 500 mL',
 		'- **Tempo**: avanza 2 minuti · aspetta 30 s',
-		'- **Paziente**: volemia 85% · sedazione 0,3 · ARDS grave · polmonite 0,4 · versamento 600 mL · broncocostrizione 0,5 · togli ARDS',
+		'- **Paziente**: volemia 85% · sedazione 0,3 · pressione addominale 20 · ARDS grave · polmonite 0,4 · versamento 600 mL · broncocostrizione 0,5 · togli ARDS',
 		'- **Console**: pausa inspiratoria · pausa espiratoria',
 				'- **Nodi**: disattiva pressione pleurica · disattiva tono simpatico · riattiva tutti',
 				'- **Altro**: stato · scenario BPCO'
@@ -427,7 +434,7 @@
 			{ name: 'set_patient',
 				description: 'Modifica caratteristiche del paziente: Volemia (0.6-1.4, 1 = normale), Sedation (0-1, 1 = nessuno sforzo spontaneo), Age, Weight, Height, Sex (M/F), HeartRateBaseline.',
 				inputSchema: { type: 'object', properties: {
-					Volemia: { type: 'number' }, Sedation: { type: 'number' }, Age: { type: 'number' }, Weight: { type: 'number' },
+					Volemia: { type: 'number' }, Sedation: { type: 'number' }, IntraAbdominalPressure: { type: 'number', description: 'mmHg, normale 5-7, ipertensione addominale da 12' }, Age: { type: 'number' }, Weight: { type: 'number' },
 					Height: { type: 'number' }, Sex: { type: 'string', enum: ['M', 'F'] }, HeartRateBaseline: { type: 'number' } } },
 				execute: (i, b) => { const r = API.setPatient(i); b.action('Paziente: ' + Object.keys(i).map(k => k + ' ' + i[k]).join(', ')); return r; } },
 			{ name: 'get_state',

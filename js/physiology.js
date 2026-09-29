@@ -69,7 +69,9 @@
 		BasalMetabolicRate: 1600,
 		//NodeSim only: circulating volume (1 = normovolemia) and depth of sedation (1 = no spontaneous effort)
 		Volemia: 1.0,
-		Sedation: 1.0
+		Sedation: 1.0,
+		//NodeSim only: intra-abdominal pressure (mmHg; normal in ICU 5-7, hypertension >= 12)
+		IntraAbdominalPressure: 5
 	};
 
 	const DEFAULT_VENTILATOR = {
@@ -111,6 +113,25 @@
 		hr: o => o.hr, co: o => o.co, sv: o => o.sv, svr: o => o.svr, map: o => o.map,
 		hb: o => o.hb, cao2: o => o.cao2, do2: o => o.do2, vo2: o => o.vo2, svo2: o => o.svo2 / 100,
 		lactate: o => o.lactate, ph: o => o.ph
+	};
+
+	/*
+	 * Calibration against published data (see README, "Confronto con la letteratura"):
+	 * recruitability (Gattinoni 2006), opening/closing pressures (Crotti 2001), chest wall share of
+	 * respiratory elastance (Gattinoni 1998), mean systemic filling pressure in ventilated patients
+	 * (Maas 2009), apnea desaturation times (Benumof 1997).
+	 */
+	const CAL = {
+		ccw0: 120,          // chest wall compliance, supine anaesthetised (mL/cmH2O)
+		iapThreshold: 7,    // intra-abdominal pressure above which the abdomen loads the chest wall (mmHg)
+		recrArds: 0.22, consArds: 0.3,
+		pOpen0: 16, pOpenArds: 12, sdOpen: 8,
+		pClose0: 4, pCloseArds: 4, sdClose: 3.5,
+		pmsf0: 15, rapRef: 5, // spontaneously breathing reference: Pmsf and right atrial pressure (mmHg)
+		pmsfPpl: 0.15,      // share of the rise in pleural pressure passed to Pmsf (abdominal compression)
+		ppvGain: 8,
+		obesFrc: 0.9, obesVo2: 0.3,
+		co2Store: 45        // body CO2 stores that buffer PaCO2 (mL per mmHg): apnea raises PaCO2 by ~3-5 mmHg/min
 	};
 
 	class PhysiologyModel {
@@ -163,7 +184,7 @@
 				pAO2: null      // alveolar PO2: the lung gas volume is an O2 store (null = start at steady state)
 			};
 			this.prev = { pplat: 20, pao2: 90, pvo2: 40, paco2: 40, ph: 7.4, mpap: 16, overdist: 0 };
-			this.settle(900);
+			this.settle(1800); // PaCO2 settles with a ~10 min time constant
 			this.t = 0;
 		}
 
@@ -214,12 +235,14 @@
 			const lvdC = C['Chronic Ventricular Systolic Disfunction'];
 			const lvd = lvdC ? (lvdC.Severity === undefined ? 0.6 : lvdC.Severity) : 0;
 			const obes = clamp((bmi - 25) / 15, 0, 1.5);
+			const iapX = Math.max(0, (P.IntraAbdominalPressure === undefined ? 5 : P.IntraAbdominalPressure) - CAL.iapThreshold);
 			const co0 = 3.0 * bsa;
 			const map0 = (P.SystolicArterialPressureBaseline + 2 * P.DiastolicArterialPressureBaseline) / 3;
-			const vo2 = P.BasalMetabolicRate / 1440 / 4.83 * 1000;
+			//extra metabolic mass of obesity
+			const vo2 = P.BasalMetabolicRate / 1440 / 4.83 * 1000 * (1 + CAL.obesVo2 * obes);
 			const hb0 = (P.Sex === 'F' ? 13.2 : 14.8) * (1 - anemia);
 			const bv = 70 * P.Weight;
-			return { pbw, bmi, bsa, ards, pneu, copdB, copdE, fib, shuntSev, anemia, effusion, lvd, obes,
+			return { pbw, bmi, bsa, ards, pneu, copdB, copdE, fib, shuntSev, anemia, effusion, lvd, obes, iapX,
 				co0, map0, vo2, hb0, bv, A };
 		}
 
@@ -230,15 +253,16 @@
 			const m = {};
 
 			//Lung structure: consolidated (not recruitable) and recruitable fractions
-			m.consolidated = clamp(0.2 * d.ards + 0.35 * d.pneu, 0, 0.6);
-			m.recruitable = clamp(0.03 + 0.45 * d.ards + 0.15 * d.pneu + 0.08 * d.obes, 0, 0.9 - m.consolidated);
-			//Opening / closing pressure distributions (superimposed pressure raises both)
-			m.pOpen = 16 + 12 * d.ards + 4 * d.pneu + 5 * d.obes;
-			m.pClose = 5 + 8 * d.ards + 2 * d.pneu + 4 * d.obes;
-			m.sdOpen = 5; m.sdClose = 3.5;
+			m.consolidated = clamp(CAL.consArds * d.ards + 0.35 * d.pneu, 0, 0.6);
+			m.recruitable = clamp(0.03 + CAL.recrArds * d.ards + 0.15 * d.pneu + 0.08 * d.obes + 0.006 * d.iapX, 0, 0.9 - m.consolidated);
+			//Opening / closing pressure distributions (superimposed pressure, from the lung and the abdomen, raises both)
+			m.pOpen = CAL.pOpen0 + CAL.pOpenArds * d.ards + 4 * d.pneu + 5 * d.obes + 0.3 * d.iapX;
+			m.pClose = CAL.pClose0 + CAL.pCloseArds * d.ards + 2 * d.pneu + 4 * d.obes + 0.3 * d.iapX;
+			m.sdOpen = CAL.sdOpen; m.sdClose = CAL.sdClose;
 
 			m.raw = 9 * (1 + 2.5 * d.copdB + 0.8 * d.copdE + 3 * A['Bronchoconstriction']) + 30 * A['Airway Obstruction'];
-			m.ccw = 180 / (1 + 0.8 * d.obes);
+			//chest wall: stiffer with obesity and with intra-abdominal hypertension
+			m.ccw = CAL.ccw0 / ((1 + 0.8 * d.obes) * (1 + 0.05 * d.iapX));
 
 			const pInspPrev = this.override ? this.override.pressure : this.prev.pplat;
 			m.openInsp = phi((pInspPrev - m.pOpen) / m.sdOpen);
@@ -263,7 +287,7 @@
 			const leak = A['Ventilator Leak'] || 0;
 			const peepSet = Math.max(0, v.PositiveEndExpiratoryPressure * (1 - 0.5 * leak));
 			m.peepSet = peepSet;
-			m.ppl0 = 3 + 4 * d.obes; // pleural pressure at FRC, supine (cmH2O)
+			m.ppl0 = 3 + 4 * d.obes + 0.4 * d.iapX; // pleural pressure at FRC, supine (cmH2O); ~30% of IAP reaches the pleura
 
 			if (this.override) {
 				//Sustained inflation: constant airway pressure, no tidal ventilation
@@ -409,7 +433,7 @@
 			m.mp = this.fz('mp', m.mp);
 
 			//Aerated FRC (supine, ZEEP) and global strain as defined by Chiumello (VT + V_PEEP) / FRC
-			m.frc = 25 * d.pbw * m.aerExp * (1 + 0.4 * d.copdE);
+			m.frc = 25 * d.pbw * m.aerExp * (1 + 0.4 * d.copdE) / (1 + CAL.obesFrc * d.obes + 0.02 * d.iapX);
 			m.eelv = this.fz('eelv', m.frc + m.vpeep);
 			m.strain = this.fz('strain', (m.vt + m.vpeep) / m.frc);
 			m.fillInsp = (m.vpeep + m.vt) / vmax;
@@ -432,14 +456,14 @@
 			h.ppc = d.effusion > 100 ? 2 * (Math.exp((d.effusion - 100) / 300) - 1) : 0;
 
 			//Mean systemic filling pressure: stressed volume, venoconstriction, abdominal transmission of PEEP
-			h.pmsf = this.fz('pmsf', Math.max(2, 12 + (volemia - 1) * d.bv / (2.8 * P.Weight) + 3 * d.lvd + 3.5 * S.symp
-				+ 0.3 * Math.max(0, pplMean - ppl0mm)));
-			const rvr = 7.4 / d.co0;
+			h.pmsf = this.fz('pmsf', Math.max(2, CAL.pmsf0 + (volemia - 1) * d.bv / (2.8 * P.Weight) + 3 * d.lvd + 3.5 * S.symp
+				+ CAL.pmsfPpl * Math.max(0, pplMean - ppl0mm)));
+			const rvr = (CAL.pmsf0 - CAL.rapRef) / d.co0;
 			h.rvr = rvr;
 
 			//Cardiac function curve calibrated on the reference (spontaneously breathing, healthy) patient
 			const kp = 3.5 * (1 + 1.2 * d.lvd);
-			const rapRef = 12 - d.co0 * rvr;
+			const rapRef = CAL.rapRef;
 			const comax0 = d.co0 / (1 - Math.exp(-(rapRef - 2.2) / 3.5));
 			const hrFactor = Math.pow(clamp(S.hr / P.HeartRateBaseline, 0.4, 2.5), 0.5);
 			const contract = (1 - 0.5 * d.lvd) * (1 + 0.25 * S.symp);
@@ -472,7 +496,7 @@
 			//at the operating point (preload dependence), relative to cardiac output
 			if (m.rr > 0) {
 				const swing = Math.abs(m.pplEE - m.pplEI) * CMH2O_TO_MMHG;
-				h.ppv = clamp(2 + 10 * swing * mean.slope / h.co, 0, 45);
+				h.ppv = clamp(2 + CAL.ppvGain * swing * mean.slope / h.co, 0, 45);
 				h.swing = swing;
 			} else h.ppv = 2;
 			h.ppv = this.fz('ppv', h.ppv);
@@ -677,7 +701,7 @@
 
 			//CO2 stores
 			const elim = g.va * S.paco2 / 0.863; // mL/min
-			S.paco2 = this.fz('paco2', clamp(S.paco2 + (g.vco2 - elim) / 25 * dt / 60, 10, 150));
+			S.paco2 = this.fz('paco2', clamp(S.paco2 + (g.vco2 - elim) / CAL.co2Store * dt / 60, 10, 150));
 
 			//Pulse oximeter lag
 			S.spo2 = this.fz('spo2', relax(S.spo2, g.sao2, dt, 8));
@@ -702,7 +726,7 @@
 				vtSet: v.TidalVolume, pinsp: v.InspiratoryPressure, ps: v.DeltaPressureSupport,
 				slope: v.Slope, flowSet: v.Flow, rrSet: v.RespirationRate, rr: m.rr, ti: m.ti, te: m.te, ie: m.te > 0 ? m.ti / m.te : 0,
 				fio2: g.fio2, raw: m.raw, ccw: m.ccw, volemia: h.volemia * 100, contract: (1 - 0.5 * d.lvd) * 100,
-				sedation: P.Sedation, pbw: d.pbw, bmi: d.bmi, bsa: d.bsa,
+				sedation: P.Sedation, iap: P.IntraAbdominalPressure, pbw: d.pbw, bmi: d.bmi, bsa: d.bsa,
 				//mechanics
 				autoPeep: m.autoPeep, peepTot: m.peepTot, aeration: m.aerExp * 100, openFrac: S.open,
 				tidalRecruit: m.tidalRecruit * 100, recruitable: m.recruitable * 100, consolidated: m.consolidated * 100,
@@ -725,7 +749,7 @@
 				//intermediate quantities, shown by the live equations view
 				x: {
 					ards: d.ards, pneu: d.pneu, copdB: d.copdB, copdE: d.copdE, fib: d.fib, shuntSev: d.shuntSev, anemia: d.anemia,
-					effusion: d.effusion, lvd: d.lvd, obes: d.obes, co0: d.co0, map0: d.map0, vo2Basal: d.vo2, hb0: d.hb0, bv: d.bv,
+					effusion: d.effusion, lvd: d.lvd, obes: d.obes, iap: P.IntraAbdominalPressure, iapX: d.iapX, cal: CAL, co0: d.co0, map0: d.map0, vo2Basal: d.vo2, hb0: d.hb0, bv: d.bv,
 					weight: P.Weight, hrBase: P.HeartRateBaseline, rrBase: P.RespirationRateBaseline, volemiaSet: P.Volemia,
 					bronch: d.A['Bronchoconstriction'] || 0, obstr: d.A['Airway Obstruction'] || 0, stress: d.A['Acute Stress'] || 0,
 					leak: d.A['Ventilator Leak'] || 0, fluid: S.fluid, hbDil: S.hbDil,
@@ -737,7 +761,7 @@
 					pmusMean: m.pmusMean || 0, pplPlat: m.ppl0 + (m.vpeep + m.vt) / m.ccw,
 					nonAerMean: g.nonAerMean, lowVQ: g.lowVQ, cc: g.cc, clow: g.clow, plow: g.plow, pvo2: g.pvo2,
 					avd: g.vo2 / (10 * h.co), vo2Demand: g.vo2, vco2: g.vco2, vdAnat: g.vdAnat, vdAlv: g.vdAlvFrac, zone1: g.zone1,
-					pio2: g.fio2 * (P_ATM - P_H2O), pAO2ss: g.pAO2ss, vLung: g.vLung, o2uptake: g.o2uptake, o2k: g.o2k, dPAO2: g.dPAO2, elim, dPaco2PerMin: (g.vco2 - elim) / 25,
+					pio2: g.fio2 * (P_ATM - P_H2O), pAO2ss: g.pAO2ss, vLung: g.vLung, o2uptake: g.o2uptake, o2k: g.o2k, dPAO2: g.dPAO2, elim, dPaco2PerMin: (g.vco2 - elim) / CAL.co2Store,
 					rvr: h.rvr, kp: h.kp, comax: h.comax, hrFactor: h.hrFactor, contractF: h.contract, lvUnload: h.lvUnload,
 					ptm: h.rap - h.pplMean - h.ppc, slope: h.preloadSlope, swing: h.swing || 0,
 					pvrWU: h.pvr, pvr0: h.pvr0, pvrLow: h.pvrLow, pvrHigh: h.pvrHigh, pvrHpv: h.pvrHpv, pvrAcid: h.pvrAcid, pvrDisease: h.pvrDisease,

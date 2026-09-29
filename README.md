@@ -32,7 +32,7 @@ node test/equations.test.js
 
 ## Cosa si può fare
 
-- **Scenari**: ARDS moderata, polmone sano, ARDS grave con ipovolemia, BPCO riacutizzata, scompenso sistolico, obesità grave, versamento pericardico.
+- **Scenari**: ARDS moderata, polmone sano, ARDS grave con ipovolemia, BPCO riacutizzata, scompenso sistolico, obesità grave, ARDS extrapolmonare con addome teso, versamento pericardico.
 - **Ventilatore**: modalità VC, PC e CPAP/PS con gli stessi parametri di `breathe.engine` (`TidalVolume`, `InspiratoryPressure`, `DeltaPressureSupport`, `PositiveEndExpiratoryPressure`, `RespirationRate`, `FractionInspiredOxygen`, `InspiratoryPeriod`, `Flow`, `Slope`, `AssistedMode` AC/CMV).
 - **Manovre**:
   - reclutamento con insufflazione sostenuta (CPAP 40 cmH₂O × 40 s, configurabile);
@@ -68,6 +68,24 @@ Il modello (`js/physiology.js`) è a parametri concentrati e volutamente esplica
 
 Il catalogo dei nodi (`js/nodes.js`) riporta per ciascun nodo descrizione, formula, range di normalità e relazioni.
 
+### Confronto con la letteratura
+
+Le costanti di calibrazione sono raccolte in `CAL` (`js/physiology.js`) e `test/literature.test.js` verifica a ogni modifica che il modello resti nei range pubblicati:
+
+| Riferimento | Cosa si confronta | Modello |
+| --- | --- | --- |
+| Gattinoni 2006 (NEJM) | Polmone reclutabile 13 ± 11%, non reclutabile circa 24% | ARDS moderata: 16% reclutabile, 18% non reclutabile |
+| Crotti 2001 (AJRCCM) | Pressioni di apertura circa 20 cmH₂O, di chiusura circa 5 cmH₂O, apertura molto dispersa | Apertura 23 (DS 8), chiusura 6 cmH₂O |
+| Gattinoni 1998 (AJRCCM) | Quota della parete toracica sull'elastanza: bassa nell'ARDS polmonare, alta con addome teso | ΔPpl/ΔPEEP: sano 0,44, ARDS 0,34, ARDS con IAP 20 mmHg 0,5 |
+| Chikhani 2016 (BJA) e serie cliniche | PEEP 0 → 20 nell'ARDS: DO₂ −25%, gittata −15/−36%, PaO₂ in aumento | DO₂ −20%, gittata −22%, PaO₂ +35 mmHg |
+| Maas 2009 (Crit Care Med) | Pmsf nel paziente ventilato 18,8 ± 4,5 mmHg | Pmsf circa 16, PVC circa 7, gradiente circa 9 mmHg |
+| Benumof 1997 (Anesthesiology) | Apnea dopo preossigenazione fino a SpO₂ 90%: sano 8,7 min, obeso 127 kg 3,1 min, malato circa 5 min | 8,3 · 3,1 · 5,8 min; PaCO₂ +3,3 mmHg/min |
+| Iso-shunt di Nunn | PaO₂ con FiO₂ 1: circa 500 mmHg a shunt 10%, circa 100 a shunt 30% | 512 e 112 mmHg |
+| Serie cliniche BPCO | PEEP intrinseca 2–12 cmH₂O | 1,3 – 10,7 cmH₂O secondo FR e Ti |
+| Michard | PPV sotto 13% in normovolemia, sopra in ipovolemia | 12% e 25% (volemia −20%) |
+
+Il modello resta esplicativo: riproduce direzioni e ordini di grandezza, non le risposte del singolo paziente (per quello servono modelli multi-compartimentali calibrati su dati individuali, come il Nottingham Physiology Simulator).
+
 ## Struttura
 
 ```
@@ -85,5 +103,6 @@ breathe-nodesim/
 ├── classic/           versione precedente (backup)
 ├── test/physiology.test.js
 ├── test/equations.test.js
-└── test/console.test.js
+├── test/console.test.js
+└── test/literature.test.js  confronto con i dati pubblicati
 ```

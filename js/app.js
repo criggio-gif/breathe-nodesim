@@ -65,7 +65,8 @@
 		RespirationRateBaseline: { label: 'FR spontanea basale', unit: 'atti/min', min: 8, max: 25, step: 1, dec: 0 },
 		BasalMetabolicRate: { label: 'Metabolismo basale', unit: 'kcal/die', min: 1000, max: 3000, step: 50, dec: 0 },
 		Volemia: { label: 'Volemia', unit: '× norma', min: 0.6, max: 1.4, step: 0.05, dec: 2 },
-		Sedation: { label: 'Sedazione (1 = nessuno sforzo spontaneo)', unit: '', min: 0, max: 1, step: 0.05, dec: 2 }
+		Sedation: { label: 'Sedazione (1 = nessuno sforzo spontaneo)', unit: '', min: 0, max: 1, step: 0.05, dec: 2 },
+		IntraAbdominalPressure: { label: 'Pressione intra-addominale', unit: 'mmHg', min: 0, max: 30, step: 1, dec: 0 }
 	};
 
 	const PRESETS = [
@@ -86,6 +87,9 @@
 		{ id: 'obese', label: 'Obesità grave', desc: 'Parete toracica rigida e atelettasie da peso: la PEEP si trasmette molto alla pleura, ma serve per tenere aperto il polmone.',
 			patient: { Weight: 140, Height: 170 }, conditions: {},
 			ventilator: { mode: 'VC', TidalVolume: 450, RespirationRate: 16, PositiveEndExpiratoryPressure: 5, FractionInspiredOxygen: 0.5, InspiratoryPeriod: 1.0, Flow: 50 } },
+		{ id: 'abdomen', label: 'ARDS extrapolmonare (addome teso)', desc: 'Sepsi addominale con pressione intra-addominale 20 mmHg: parete toracica rigida, basi collassate. La PEEP si trasmette molto alla pleura e al cuore: confronta con l’ARDS moderata.',
+			patient: { IntraAbdominalPressure: 20 }, conditions: { 'ARDS': { LeftLungSeverity: 0.5, RightLungSeverity: 0.5 } },
+			ventilator: { mode: 'VC', TidalVolume: 450, RespirationRate: 20, PositiveEndExpiratoryPressure: 8, FractionInspiredOxygen: 0.6, InspiratoryPeriod: 0.9, Flow: 50 } },
 		{ id: 'tamponade', label: 'Versamento pericardico', desc: 'Il riempimento cardiaco è già limitato dal pericardio: anche piccoli aumenti di PEEP riducono molto la gittata.',
 			conditions: { 'Pericardial Effusion': { AccumulatedVolume: 550 } },
 			ventilator: { mode: 'VC', TidalVolume: 500, RespirationRate: 14, PositiveEndExpiratoryPressure: 5, FractionInspiredOxygen: 0.4, InspiratoryPeriod: 1.0, Flow: 60 } }
@@ -1026,7 +1030,7 @@
 			simTime: fmtTime(out.t),
 			scenario: (PRESETS.find(p => p.id === presetId) || {}).label,
 			ventilator: clone(model.ventilator),
-			patient: { Sex: P.Sex, Age: P.Age, Weight: P.Weight, Height: P.Height, PBW: rnd(out.pbw), Volemia: P.Volemia, Sedation: P.Sedation },
+			patient: { Sex: P.Sex, Age: P.Age, Weight: P.Weight, Height: P.Height, PBW: rnd(out.pbw), Volemia: P.Volemia, Sedation: P.Sedation, IntraAbdominalPressure: P.IntraAbdominalPressure },
 			conditions: clone(model.conditions),
 			actions,
 			maneuver: maneuver ? { name: maneuver.name, step: (maneuver.steps[maneuver.i] || {}).label, secondsLeft: Math.round(maneuver.total - maneuver.elapsed) } : null,
