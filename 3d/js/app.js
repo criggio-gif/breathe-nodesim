@@ -20,6 +20,8 @@
 			ventilator: { mode: 'VC', TidalVolume: 430, RespirationRate: 24, PositiveEndExpiratoryPressure: 8, FractionInspiredOxygen: 0.8, InspiratoryPeriod: 0.8, Flow: 50 } },
 		{ id: 'copd', label: 'BPCO riacutizzata', conditions: { 'COPD': { BronchitisSeverity: 0.7, LeftLungEmphysemaSeverity: 0.6, RightLungEmphysemaSeverity: 0.6 } },
 			ventilator: { mode: 'VC', TidalVolume: 500, RespirationRate: 22, PositiveEndExpiratoryPressure: 5, FractionInspiredOxygen: 0.35, InspiratoryPeriod: 1.2, Flow: 50 } },
+		{ id: 'abdomen', label: 'ARDS extrapolmonare (addome teso)', patient: { IntraAbdominalPressure: 20 }, conditions: { 'ARDS': { LeftLungSeverity: 0.5, RightLungSeverity: 0.5 } },
+			ventilator: { mode: 'VC', TidalVolume: 450, RespirationRate: 20, PositiveEndExpiratoryPressure: 8, FractionInspiredOxygen: 0.6, InspiratoryPeriod: 0.9, Flow: 50 } },
 		{ id: 'lvd', label: 'Scompenso sistolico con edema', patient: { Volemia: 1.15 },
 			conditions: { 'Chronic Ventricular Systolic Disfunction': { Severity: 0.8 }, 'ARDS': { LeftLungSeverity: 0.3, RightLungSeverity: 0.3 } },
 			ventilator: { mode: 'VC', TidalVolume: 480, RespirationRate: 18, PositiveEndExpiratoryPressure: 5, FractionInspiredOxygen: 0.6, InspiratoryPeriod: 1.0, Flow: 50 } }
@@ -46,6 +48,7 @@
 		ccw: { label: 'Peso (BMI, parete toracica)', unit: 'kg', min: 40, max: 180, step: 1, get: m => m.patient.Weight, set: (m, v) => m.setPatient({ Weight: v }) },
 		lungdz: Object.assign({ label: 'Gravità ARDS', unit: '', min: 0, max: 1, step: 0.05 }, cond('ARDS', ['LeftLungSeverity', 'RightLungSeverity'])),
 		volemia: { label: 'Volemia', unit: '%', min: 60, max: 140, step: 1, get: m => Math.round(m.patient.Volemia * 100), set: (m, v) => m.setPatient({ Volemia: v / 100 }) },
+		iap: { label: 'Pressione intra-addominale', unit: 'mmHg', min: 0, max: 30, step: 1, get: m => m.patient.IntraAbdominalPressure, set: (m, v) => m.setPatient({ IntraAbdominalPressure: v }) },
 		contract: Object.assign({ label: 'Disfunzione sistolica VS', unit: '', min: 0, max: 1, step: 0.05 }, cond('Chronic Ventricular Systolic Disfunction', ['Severity'])),
 		hb: Object.assign({ label: 'Anemia (fattore di riduzione)', unit: '', min: 0, max: 0.4, step: 0.02 }, cond('Chronic Anemia', ['ReductionFactor'])),
 		shunt: Object.assign({ label: 'Shunt polmonare (patologia)', unit: '', min: 0, max: 1, step: 0.05 }, cond('Pulmonary Shunt', ['Severity'])),
