@@ -734,6 +734,16 @@ tr.best td { background: var(--accent-soft); font-weight: 600; }
 .hr-row b { font: 600 15px var(--font-mono); color: #f4c542; font-variant-numeric: tabular-nums; }
 .hr-row i { font-style: normal; font-size: 10.5px; color: #8a9aa5; }
 
+/* network only: the console and the trends are hidden, the graph takes the stage in its ordered layout */
+.app.network-mode .bedside { display: none; }
+.app.network-mode .stage { grid-template-rows: minmax(0, 1fr); }
+.app.network-mode .graph-wrap { border-bottom: 0; }
+.app.network-mode #z-reset { display: none; }
+#graph.ordered .node { cursor: pointer; }
+@media (max-width: 860px) {
+	.app.network-mode .stage { grid-template-rows: 80vh; }
+}
+
 /* console only: the nodes are hidden, the console takes the stage */
 .app.console-mode .graph-wrap { display: none; }
 .app.console-mode .stage { grid-template-rows: auto; }

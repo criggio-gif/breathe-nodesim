@@ -833,15 +833,17 @@
 			const savePrefs = () => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) { /* storage unavailable */ } };
 
 			function setView(v) {
-				prefs.view = v === 'console' ? 'console' : 'full';
+				prefs.view = v === 'console' || v === 'network' ? v : 'full';
 				savePrefs();
 				document.querySelector('.app').classList.toggle('console-mode', prefs.view === 'console');
+				document.querySelector('.app').classList.toggle('network-mode', prefs.view === 'network');
+				graph.setOrdered(prefs.view === 'network');
 				document.querySelectorAll('#view-mode button').forEach(b => {
 					const on = b.dataset.view === prefs.view;
 					b.classList.toggle('on', on);
 					b.setAttribute('aria-checked', on);
 				});
-				if (prefs.view === 'full') requestAnimationFrame(() => graph.fit());
+				if (prefs.view !== 'console') requestAnimationFrame(() => graph.fit());
 			}
 
 			function wireView() {

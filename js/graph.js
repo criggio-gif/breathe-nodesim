@@ -180,7 +180,22 @@
 		}
 
 		//Drawn position: rows spread out when formulas are shown (the saved layout is not changed)
-		P(id) { const p = this.pos[id]; return { x: p.x, y: p.y * this.yScale }; }
+		P(id) {
+			const p = this.ordered ? this.defaultPos(this.C.byId[id]) : this.pos[id];
+			return { x: p.x, y: p.y * this.yScale };
+		}
+
+		/*
+		 * Ordered view: every node back in its column and row (the saved layout is kept and comes
+		 * back when leaving the view); nodes cannot be dragged while it is on.
+		 */
+		setOrdered(on) {
+			this.ordered = !!on;
+			this.svg.classList.toggle('ordered', this.ordered);
+			this.C.NODES.forEach(n => this.placeNode(n.id));
+			this.redrawEdges();
+			this.fit();
+		}
 
 		placeNode(id) {
 			const p = this.P(id);
@@ -284,7 +299,7 @@
 				try { g.setPointerCapture(ev.pointerId); } catch (e) { /* synthetic or finished pointer */ }
 			});
 			g.addEventListener('pointermove', ev => {
-				if (!drag) return;
+				if (!drag || this.ordered) return;
 				if (!drag.moved && Math.hypot(ev.clientX - drag.sx, ev.clientY - drag.sy) < 4) return;
 				drag.moved = true;
 				const pt = this.toGraph(ev);
@@ -411,7 +426,8 @@
 			const cw = this.svg.clientWidth || 800, ch = this.svg.clientHeight || 500;
 			const scale = Math.max(b.w / cw, b.h / ch);
 			const w = cw * scale, h = ch * scale;
-			this.setViewBox([b.x - (w - b.w) / 2, b.y - (h - b.h) / 2, w, h]);
+			//the ordered view starts at the top, under the column titles
+			this.setViewBox([b.x - (w - b.w) / 2, this.ordered ? b.y : b.y - (h - b.h) / 2, w, h]);
 		}
 
 		zoom(f, center) {

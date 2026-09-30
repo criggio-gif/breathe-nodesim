@@ -335,6 +335,8 @@
 		}
 
 		draw(o) {
+			//hidden console (e.g. the network-only view): nothing to draw
+			if (!this.canvas.clientWidth || this.canvas.clientHeight < 40) return;
 			const { ctx, w, h } = setupCanvas(this.canvas);
 			const now = performance.now();
 			this.rescale(o, this.lastDraw ? (now - this.lastDraw) / 1000 : 0);
@@ -363,7 +365,7 @@
 				ctx.textAlign = 'right';
 				//at least ~16 px between scale labels
 				let step = tr.step;
-				while (step / (tr.max - tr.min) * (bandH - 8) < 16) step *= 2;
+				for (let k = 0; k < 12 && step / (tr.max - tr.min) * Math.max(1, bandH - 8) < 16; k++) step *= 2;
 				for (let v = Math.ceil(tr.min / step) * step; v <= tr.max + 1e-9; v += step) {
 					const y = Math.round(ymap(v)) + 0.5;
 					ctx.strokeStyle = v === 0 ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.07)';
