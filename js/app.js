@@ -1036,6 +1036,7 @@
 			conditions: clone(model.conditions),
 			actions,
 			maneuver: maneuver ? { name: maneuver.name, step: (maneuver.steps[maneuver.i] || {}).label, secondsLeft: Math.round(maneuver.total - maneuver.elapsed) } : null,
+			switchedOffNodes: Object.keys(model.frozen),
 			values: keyValues(out)
 		};
 	}

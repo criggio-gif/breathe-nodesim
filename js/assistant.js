@@ -412,8 +412,8 @@
 				inputSchema: { type: 'object', properties: { type: { type: 'string', enum: ['insp', 'exp'] } }, required: ['type'] },
 				execute: (i, b) => { const r = API.holdManeuver(i.type); b.action(r.maneuver); return r; } },
 			{ name: 'switch_node',
-				description: 'Disattiva (enabled false) o riattiva (enabled true) un nodo del grafo: da disattivato resta fermo al valore attuale e interrompe la catena causale. Id disponibili: ' + API.freezableNodes().map(n => n.id + ' (' + n.label + ')').join(', '),
-				inputSchema: { type: 'object', properties: { id: { type: 'string' }, enabled: { type: 'boolean' } }, required: ['id', 'enabled'] },
+				description: 'Disattiva (enabled false) o riattiva (enabled true) un nodo del grafo: da disattivato resta fermo al valore attuale e interrompe la catena causale. Restituisce il nodo e i nodi ora disattivati. Gli id e i nomi dei nodi sono nelle istruzioni.',
+				inputSchema: { type: 'object', properties: { id: { type: 'string', enum: API.freezableNodes().map(n => n.id) }, enabled: { type: 'boolean' } }, required: ['id', 'enabled'] },
 				execute: (i, b) => { const r = API.setNodeEnabled(i.id, i.enabled); b.action((i.enabled ? 'Riattivato ' : 'Disattivato ') + r.node); return r; } },
 			{ name: 'change_volume',
 				description: 'Modifica la volemia: mL positivi = bolo di fluidi (infuso in circa 1 min ogni 100 mL), mL negativi = emorragia acuta.',
@@ -460,8 +460,10 @@
 		session_expired: 'La sessione di Claude è scaduta: accedi di nuovo e ricarica la pagina.',
 		refused: 'Claude non ha risposto a questa richiesta. Prova a riformularla.',
 		empty_completion: 'Nessuna risposta. Prova a riformulare in modo più semplice.',
-		prompt_too_large: 'La conversazione è troppo lunga: ricarica la pagina per ricominciare.'
-	};
+		prompt_too_large: 'La conversazione è troppo lunga: ricarica la pagina per ricominciare.',
+		invalid_request: 'La pagina ha inviato a Claude una richiesta non valida (errore del simulatore, non tuo). Usa intanto i comandi semplici e segnalalo.',
+		transform_error: 'La pagina ha inviato a Claude una richiesta non valida (errore del simulatore, non tuo). Usa intanto i comandi semplici e segnalalo.'
+		};
 	const DISABLING = ['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed', 'tools_unavailable'];
 
 	async function runAI(text) {
@@ -471,7 +473,8 @@
 		turns.push({ role: 'user', content: text });
 		const history = turns.slice(-10);
 		const last = history[history.length - 1];
-		const messages = [{ role: 'user', content: INSTRUCTIONS }].concat(history.slice(0, -1), [{
+		const nodeList = '\n\nNodi disattivabili (id: nome): ' + API.freezableNodes().map(n => n.id + ': ' + n.label).join('; ') + '.';
+		const messages = [{ role: 'user', content: INSTRUCTIONS + nodeList }].concat(history.slice(0, -1), [{
 			role: 'user',
 			content: last.content + '\n\n[Stato attuale del simulatore, JSON]\n' + JSON.stringify(API.state())
 		}]);
@@ -492,6 +495,7 @@
 		} catch (e) {
 			const code = e && e.code;
 			const partial = e && e.text ? e.text + '\n\n' : '';
+			if (code && code !== 'cancelled') console.warn('Assistente, errore di sample:', code, e.message);
 			turns.pop();
 			if (code === 'cancelled') bubble.set(partial + '*Interrotto.*', true);
 			else if (DISABLING.includes(code)) {
