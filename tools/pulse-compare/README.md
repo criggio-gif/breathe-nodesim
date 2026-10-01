@@ -28,6 +28,7 @@ Lo script scrive in `out/` (escluso da git):
 | `run.sh` | Compila, esegue tutto e scrive `out/confronto.md` |
 | `RISULTATI-2026-10-01.md` | Risultati della prima esecuzione completa, come riferimento |
 | `RISULTATI-2026-10-01-curva-pv.md` | Stessa scala dopo la curva P-V con flessi |
+| `RISULTATI-2026-10-01-crs80.md` | Dopo la compliance del sano a 80 mL/cmH₂O |
 
 ## Come leggere il confronto
 
