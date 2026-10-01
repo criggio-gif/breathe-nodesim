@@ -27,6 +27,7 @@ Lo script scrive in `out/` (escluso da git):
 | `compare.js` | Unisce le tabelle in Markdown |
 | `run.sh` | Compila, esegue tutto e scrive `out/confronto.md` |
 | `RISULTATI-2026-10-01.md` | Risultati della prima esecuzione completa, come riferimento |
+| `RISULTATI-2026-10-01-curva-pv.md` | Stessa scala dopo la curva P-V con flessi |
 
 ## Come leggere il confronto
 
@@ -34,5 +35,6 @@ Lo script scrive in `out/` (escluso da git):
 - **Nessuno dei due è il "vero":** per le direzioni attese e gli ordini di grandezza il riferimento resta la letteratura (`test/literature.test.js`).
 - **Risultati del 1° ottobre 2026:**
   - In Pulse la PEEP non cambia gittata, PVC e pressione arteriosa, contro la letteratura. In NodeSim la gittata cala del 20–27% a PEEP 20.
-  - In Pulse la compliance statica aumenta con la PEEP sia nel sano sia nell'ARDS. In NodeSim cala sempre. Nei pazienti reclutabili la letteratura descrive un aumento fino a una PEEP ottimale.
+  - In Pulse la compliance statica aumenta con la PEEP sia nel sano sia nell'ARDS. Nella prima versione di NodeSim calava sempre. Con la curva P-V a due flessi resta stabile nel sano (56–58 mL/cmH₂O) e nell'ARDS ha un massimo a PEEP 10–15 (39 → 44 → 39 a gravità 0,6), come descrive la letteratura nei pazienti reclutabili.
+  - Dopo la curva P-V la gittata di NodeSim cala del 24–31% a PEEP 20 (prima 20–27%).
   - Nell'ARDS Pulse ha più CO₂, una pressione arteriosa polmonare più bassa e una risposta dell'ossigenazione alla PEEP più ampia.
