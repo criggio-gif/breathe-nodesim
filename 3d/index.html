@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NodeSim 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/style.css?v=6">
+</head>
+<body>
+<div class="shell">
+
+	<main class="space" id="space" aria-label="Spazio 3D dei nodi fisiologici">
+		<div class="space-canvas" id="space-canvas"></div>
+		<div class="labels" id="labels" aria-hidden="true"></div>
+
+		<header class="hud-top">
+			<div class="brand">
+				<span class="brand-mark" aria-hidden="true"></span>
+				<div>
+					<h1>NodeSim <span>3D</span></h1>
+					<p>Il paziente ventilato come una rete di nodi fisiologici</p>
+				</div>
+			</div>
+			<div class="hud-controls">
+				<label class="sr-only" for="scenario">Scenario</label>
+				<select id="scenario"></select>
+				<button class="hud-btn" id="play" aria-label="Pausa" title="Pausa / riprendi">&#10074;&#10074;</button>
+				<div class="seg" id="speed" role="radiogroup" aria-label="Velocità">
+					<button data-speed="1" class="on" role="radio" aria-checked="true">1&times;</button>
+					<button data-speed="5" role="radio" aria-checked="false">5&times;</button>
+					<button data-speed="20" role="radio" aria-checked="false">20&times;</button>
+				</div>
+				<output class="clock" id="clock">00:00</output>
+								<div class="seg" id="view-mode" role="radiogroup" aria-label="Vista">
+									<button data-view="full" class="on" role="radio" aria-checked="true" title="Nodi 3D e console">Rete + console</button>
+									<button data-view="console" role="radio" aria-checked="false" title="Nasconde i nodi: solo ventilatore e monitor">Solo console</button>
+								</div>
+								<div class="settings">
+									<button class="hud-btn" id="btn-settings" aria-haspopup="true" aria-expanded="false" aria-controls="settings-menu">&#9881; Impostazioni</button>
+									<div class="settings-menu" id="settings-menu" hidden>
+										<label class="toggle"><input type="checkbox" id="set-formulas"><span>Formule semplificate sui nodi</span></label>
+										<p class="hint">Un nodo si disattiva dalla sua scheda (&#9211; Disattiva nodo): resta fermo al suo valore, diventa grigio e i suoi collegamenti si spengono.</p>
+										<button class="act" id="btn-all-on" disabled>Riattiva tutti i nodi</button>
+										<a class="menu-link" href="classic/">Versione classica (backup)</a>
+									</div>
+								</div>
+							</div>
+		</header>
+
+		<div class="legend" aria-hidden="true">
+			<span><i class="dot up"></i>spinge in su</span>
+			<span><i class="dot down"></i>spinge in giù</span>
+			<span class="legend-hint">Trascina per ruotare · rotella per lo zoom · clic su un nodo per modificarlo</span>
+		</div>
+
+		<section class="card" id="card" hidden aria-live="polite">
+			<button class="card-close" id="card-close" aria-label="Chiudi">×</button>
+			<div class="card-cat"><i id="card-dot"></i><span id="card-cat"></span></div>
+			<h2 id="card-title"></h2>
+			<div class="card-value"><output id="card-val"></output><span id="card-unit"></span><span class="card-delta" id="card-delta"></span></div>
+			<p class="card-sub" id="card-sub"></p>
+						<p class="card-simple" id="card-simple"></p>
+						<button type="button" class="card-power" id="card-power" aria-pressed="false"></button>
+						<div class="card-edit" id="card-edit"></div>
+			<p class="card-desc" id="card-desc"></p>
+			<div class="card-links" id="card-links"></div>
+		</section>
+
+		<div class="hud-stats" id="hud-stats" aria-hidden="true"></div>
+		<div class="toast" id="toast" hidden></div>
+	</main>
+
+	<aside class="side" id="side" aria-label="Monitor e ventilatore">
+		<section class="vent">
+			<div class="side-head">
+				<h2>Ventilatore</h2>
+				<div class="seg seg-mode" id="mode" role="radiogroup" aria-label="Modalità">
+					<button data-mode="VC" role="radio">VC</button>
+					<button data-mode="PC" role="radio">PC</button>
+					<button data-mode="CPAP" role="radio">CPAP</button>
+				</div>
+			</div>
+			<div class="vent-set" id="vent-set"></div>
+			<div class="vent-meas" id="vent-meas"></div>
+		</section>
+
+		<section class="monitor">
+					<div class="vent-head">
+						<span class="vent-mode-label" id="vent-mode-label">VC</span>
+						<div class="vent-keys">
+							<button class="vkey" id="hold-insp" title="Clic: pausa di 2 s alla fine della prossima inspirazione (Pplat, compliance, resistenze). Tieni premuto per prolungarla, max 15 s.">Pausa insp.</button>
+							<button class="vkey" id="hold-exp" title="Clic: pausa di 3 s alla fine della prossima espirazione (PEEP totale, auto-PEEP). Tieni premuto per prolungarla, max 15 s.">Pausa esp.</button>
+							<button class="vkey" id="pv-key" aria-expanded="false" aria-controls="pv-panel" title="Curva pressione-volume quasi statica: flessi inferiore e superiore, compliance lineare, isteresi">Curva P-V</button>
+							<button class="vkey" id="freeze" aria-pressed="false" title="Congela le curve">Congela</button>
+						</div>
+					</div>
+					<p class="vent-status" id="hold-status" aria-live="polite"></p>
+					<div class="monitor-screen"><canvas id="monitor" aria-label="Curve di pressione, flusso, volume e pressione arteriosa"></canvas></div>
+					<div class="vitals" id="vitals"></div>
+				</section>
+
+				<section class="loop-wrap">
+					<canvas id="loop" aria-label="Loop pressione-volume"></canvas>
+					<div class="hold-results" id="hold-results"></div>
+				</section>
+
+		<section class="actions">
+			<h2>Manovre</h2>
+			<div class="action-row">
+				<button class="act act-primary" id="act-rm">Reclutamento 40 cmH&#8322;O &times; 30 s</button>
+				<button class="act" id="act-fluid">Bolo 500 mL</button>
+				<button class="act" id="act-bleed">Emorragia 500 mL</button>
+			</div>
+			<p class="status" id="status"></p>
+		</section>
+	</aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<div class="pv-panel" id="pv-panel" role="dialog" aria-label="Curva pressione-volume" hidden>
+	<div class="pv-head">
+		<strong>Curva P-V quasi statica</strong>
+		<span class="pv-status" id="pv-status" aria-live="polite"></span>
+		<button class="pv-x" id="pv-close" aria-label="Chiudi">&times;</button>
+	</div>
+	<div class="pv-body">
+		<canvas id="pv-canvas" aria-label="Branca di insufflazione e di desufflazione con i punti di flesso"></canvas>
+		<div class="pv-side">
+			<div class="pv-opts">
+				<label>Da <select id="pv-from"><option value="0">ZEEP</option><option value="peep">PEEP impostata</option></select></label>
+				<label>a <select id="pv-to"><option>30</option><option>35</option><option selected>40</option><option>45</option></select> cmH&#8322;O</label>
+				<label>rampa <select id="pv-rate"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="5">5</option></select> cmH&#8322;O/s</label>
+				<button class="vkey" id="pv-start">Avvia</button>
+			</div>
+			<div class="pv-res" id="pv-res"></div>
+		</div>
+	</div>
+</div>
+<script src="js/physiology.js?v=6"></script>
+<script src="js/nodes.js?v=6"></script>
+<script src="js/console.js?v=6"></script>
+<script src="js/space.js?v=6"></script>
+<script src="js/app.js?v=6"></script>
+</body>
+</html>
