@@ -122,11 +122,15 @@
 	 * (Maas 2009), apnea desaturation times (Benumof 1997).
 	 */
 	const CAL = {
-		ccw0: 120,          // chest wall compliance, supine anaesthetised (mL/cmH2O)
+		ccw0: 168,          // chest wall compliance, supine anaesthetised (mL/cmH2O)
+		clSpec: 2.1,        // aerated lung: compliance per kg of predicted body weight (mL/cmH2O/kg); with the chest wall Crs ≈ 80 in the anaesthetised healthy
+		vmaxSpec: 58.8,     // aerated lung: capacity above FRC per kg of predicted body weight (mL/kg)
+		ccwArds: 0.25,      // ARDS: stiffer chest wall (oedema, fluid balance, mixed pulmonary/extrapulmonary forms: Gattinoni 1998)
+		clArds: 0.65,       // ARDS: stiffer aerated units (scaled by √severity)
 		iapThreshold: 7,    // intra-abdominal pressure above which the abdomen loads the chest wall (mmHg)
 		recr0: 0.08,        // anaesthesia atelectasis in the healthy supine lung (Hedenstierna: about 5-10%)
 		kneeFrac: 0.45,     // upper inflection point: fraction of the aerated lung's capacity where tissue starts to stiffen
-		vmaxArds: 0.2,      // ARDS: smaller capacity of the aerated units (oedema), so the upper inflection point comes earlier
+		vmaxArds: 0.45,     // ARDS: smaller capacity of the aerated units (oedema, scaled by √severity), so the upper inflection point stays near 30 cmH2O
 		odStart: 0.55,      // overdistension index: filling of the aerated capacity where alveolar capillaries start to be compressed
 		recrArds: 0.22, consArds: 0.3,
 		pOpen0: 16, pOpenArds: 6, sdOpen: 6,
@@ -358,7 +362,7 @@
 
 			m.raw = 9 * (1 + 2.5 * d.copdB + 0.8 * d.copdE + 3 * A['Bronchoconstriction']) + 30 * A['Airway Obstruction'];
 			//chest wall: stiffer with obesity and with intra-abdominal hypertension
-			m.ccw = CAL.ccw0 / ((1 + 0.8 * d.obes) * (1 + 0.05 * d.iapX));
+			m.ccw = CAL.ccw0 / ((1 + 0.8 * d.obes) * (1 + 0.05 * d.iapX) * (1 + CAL.ccwArds * d.ards));
 
 			const pInspPrev = this.override ? this.override.pressure : this.prev.pplat;
 			m.openInsp = phi((pInspPrev - m.pOpen) / m.sdOpen);
@@ -380,8 +384,8 @@
 			 * lower inflection point of the whole respiratory system emerges from recruitment itself
 			 * (units opening as pressure crosses their opening pressure, Hickling 1998), not from the tissue.
 			 */
-			const vmaxSpec = 42 * (1 + 0.35 * d.copdE) * (1 - 0.45 * d.fib) * (1 - CAL.vmaxArds * d.ards);
-			const clSpec = 1.5 * (1 + 0.9 * d.copdE) * (1 - 0.6 * d.fib) * (1 - 0.3 * d.ards);
+			const vmaxSpec = CAL.vmaxSpec * (1 + 0.35 * d.copdE) * (1 - 0.45 * d.fib) * (1 - CAL.vmaxArds * Math.sqrt(d.ards));
+			const clSpec = CAL.clSpec * (1 + 0.9 * d.copdE) * (1 - 0.6 * d.fib) * (1 - CAL.clArds * Math.sqrt(d.ards));
 			//static pressure (sustained inflation, PV maneuver): the lung is as open as that pressure makes it
 			const aerPV = this.override ? m.aerInsp : 0.5 * (m.aerExp + m.aerInsp);
 			const vmax = Math.max(200, vmaxSpec * d.pbw * aerPV);
