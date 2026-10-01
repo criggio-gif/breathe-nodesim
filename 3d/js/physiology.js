@@ -124,6 +124,7 @@
 	const CAL = {
 		ccw0: 120,          // chest wall compliance, supine anaesthetised (mL/cmH2O)
 		iapThreshold: 7,    // intra-abdominal pressure above which the abdomen loads the chest wall (mmHg)
+		recr0: 0.08,        // anaesthesia atelectasis in the healthy supine lung (Hedenstierna: about 5-10%)
 		recrArds: 0.22, consArds: 0.3,
 		pOpen0: 16, pOpenArds: 12, sdOpen: 8,
 		pClose0: 4, pCloseArds: 4, sdClose: 3.5,
@@ -254,7 +255,7 @@
 
 			//Lung structure: consolidated (not recruitable) and recruitable fractions
 			m.consolidated = clamp(CAL.consArds * d.ards + 0.35 * d.pneu, 0, 0.6);
-			m.recruitable = clamp(0.03 + CAL.recrArds * d.ards + 0.15 * d.pneu + 0.08 * d.obes + 0.006 * d.iapX, 0, 0.9 - m.consolidated);
+			m.recruitable = clamp(CAL.recr0 + CAL.recrArds * d.ards + 0.15 * d.pneu + 0.08 * d.obes + 0.006 * d.iapX, 0, 0.9 - m.consolidated);
 			//Opening / closing pressure distributions (superimposed pressure, from the lung and the abdomen, raises both)
 			m.pOpen = CAL.pOpen0 + CAL.pOpenArds * d.ards + 4 * d.pneu + 5 * d.obes + 0.3 * d.iapX;
 			m.pClose = CAL.pClose0 + CAL.pCloseArds * d.ards + 2 * d.pneu + 4 * d.obes + 0.3 * d.iapX;
@@ -270,7 +271,8 @@
 			m.aerExp = 1 - m.consolidated - m.recruitable * (1 - S.open);
 			m.aerInsp = 1 - m.consolidated - m.recruitable * (1 - openCycleMax);
 			m.aerExp = this.fz('recruit', m.aerExp);
-			m.aerInsp = Math.max(m.aerInsp, m.aerExp);
+			//end-inspiratory aeration = end-expiratory + units opened only during inspiration (also when aeration is switched off)
+			m.aerInsp = m.aerExp + m.recruitable * (openCycleMax - S.open);
 			m.tidalRecruit = m.recruitable * (openCycleMax - S.open);
 
 			//Aerated ("baby") lung pressure-volume curve (Salazar-Knowles) + linear chest wall
