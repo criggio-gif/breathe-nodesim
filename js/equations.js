@@ -61,7 +61,7 @@
 			E(V('IAP', o.iap, 0, 'iap'), [V('impostata', o.iap, 0)], 'Normale in terapia intensiva 5–7 mmHg; ipertensione addominale da 12 mmHg. Sopra 7 mmHg irrigidisce la parete toracica, alza la pressione pleurica e comprime le basi polmonari (ARDS "extrapolmonare").')
 		],
 		ccw: o => [
-			E(V('Ccw', o.ccw, 0, 'ccw'), [F([K(o.x.cal.ccw0)], ['(', K(1), '+', K(0.8), '·', V('obesità', o.x.obes, 2), ')', '·', '(', K(1), '+', K(0.05), '·', V('IAP − 7', o.x.iapX, 1, 'iap'), ')'])],
+			E(V('Ccw', o.ccw, 0, 'ccw'), [F([K(o.x.cal.ccw0)], ['(', K(1), '+', K(0.8), '·', V('obesità', o.x.obes, 2), ')', '·', '(', K(1), '+', K(0.05), '·', V('IAP − 7', o.x.iapX, 1, 'iap'), ')', '·', '(', K(1), '+', K(o.x.cal.ccwArds), '·', V('ARDS', o.x.ards, 2), ')'])],
 				'obesità = (BMI − 25)/15, limitata a 0–1,5. La pressione intra-addominale sopra 7 mmHg irrigidisce la parete toracica.')
 		],
 		lungdz: o => [

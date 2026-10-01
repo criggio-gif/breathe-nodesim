@@ -75,19 +75,20 @@ Le costanti di calibrazione sono raccolte in `CAL` (`js/physiology.js`) e `test/
 
 | Riferimento | Cosa si confronta | Modello |
 | --- | --- | --- |
+| Westbrook 1973, Pelosi 1998 | Compliance del sistema respiratorio nel sano anestetizzato e curarizzato circa 60–80 mL/cmH₂O (sveglio circa 100) | 80 mL/cmH₂O: polmone 152, parete 168 |
 | Hedenstierna (atelettasie da anestesia) | Nel sano in anestesia generale collassa circa il 5–10% del polmone; la PEEP lo riapre | Reclutabile 8%: aerazione 93% in ZEEP, 98% a PEEP 10 |
 | Gattinoni 2006 (NEJM) | Polmone reclutabile 13 ± 11%, non reclutabile circa 24% | ARDS moderata: 21% reclutabile, 18% non reclutabile |
 | Crotti 2001 (AJRCCM) | Pressioni di apertura circa 20 cmH₂O, di chiusura circa 5 cmH₂O, apertura molto dispersa | Apertura 20 (DS 6), chiusura 6 cmH₂O |
-| Ranieri 1994, Roupie 1995 | Curva P-V statica nell'ARDS: flesso inferiore circa 10–20, superiore circa 25–30 cmH₂O, isteresi | ARDS moderata: LIP 17,5, UIP 29,5 cmH₂O, compliance lineare 48 mL/cmH₂O, isteresi 82 mL |
-| Curva di rilasciamento di Rahn | Nel sano la curva è lineare fino a circa 25–30 cmH₂O, senza flesso inferiore | Nessun LIP, UIP 30 cmH₂O, compliance lineare 57 mL/cmH₂O |
-| Titolazione decrementale (Suarez-Sipmann 2007) | Nell'ARDS reclutabile la compliance è massima a una PEEP intermedia | Crs 30 → 46 → 41 mL/cmH₂O a PEEP 24 → 12 → 4 |
-| Gattinoni 1998 (AJRCCM) | Quota della parete toracica sull'elastanza: bassa nell'ARDS polmonare, alta con addome teso | ΔPpl/ΔPEEP: sano 0,48, ARDS 0,38, ARDS con IAP 20 mmHg 0,49 |
-| Chikhani 2016 (BJA) e serie cliniche | PEEP 0 → 20 nell'ARDS: DO₂ −25%, gittata −15/−36%, PaO₂ in aumento | DO₂ −23%, gittata −26%, PaO₂ +40 mmHg |
+| Ranieri 1994, Roupie 1995 | Curva P-V statica nell'ARDS: flesso inferiore circa 10–20, superiore circa 25–30 cmH₂O, isteresi | ARDS moderata: LIP 18, UIP 30 cmH₂O, compliance lineare 48 mL/cmH₂O, isteresi 88 mL |
+| Curva di rilasciamento di Rahn | Nel sano la curva è lineare fino a circa 25–30 cmH₂O, senza flesso inferiore | Nessun LIP, UIP 30,5 cmH₂O, compliance lineare 80 mL/cmH₂O |
+| Titolazione decrementale (Suarez-Sipmann 2007) | Nell'ARDS reclutabile la compliance è massima a una PEEP intermedia | Crs 32 → 44 → 38 mL/cmH₂O a PEEP 24 → 12 → 4 |
+| Gattinoni 1998 (AJRCCM) | Quota della parete toracica sull'elastanza: bassa nell'ARDS polmonare, alta con addome teso | ΔPpl/ΔPEEP: sano 0,48, ARDS 0,30, ARDS con IAP 20 mmHg 0,40 |
+| Chikhani 2016 (BJA) e serie cliniche | PEEP 0 → 20 nell'ARDS: DO₂ −25%, gittata −15/−36%, PaO₂ in aumento | DO₂ −17%, gittata −20%, PaO₂ +51 mmHg |
 | Maas 2009 (Crit Care Med) | Pmsf nel paziente ventilato 18,8 ± 4,5 mmHg | Pmsf circa 16, PVC circa 7, gradiente circa 9 mmHg |
-| Benumof 1997 (Anesthesiology) | Apnea dopo preossigenazione fino a SpO₂ 90%: sano 8,7 min, obeso 127 kg 3,1 min, malato circa 5 min | 8,3 · 3,1 · 5,8 min; PaCO₂ +3,3 mmHg/min |
+| Benumof 1997 (Anesthesiology) | Apnea dopo preossigenazione fino a SpO₂ 90%: sano 8,7 min, obeso 127 kg 3,1 min, malato circa 5 min | 8,6 · 3,3 · 5,6 min |
 | Iso-shunt di Nunn | PaO₂ con FiO₂ 1: circa 500 mmHg a shunt 10%, circa 100 a shunt 30% | 512 e 112 mmHg |
-| Serie cliniche BPCO | PEEP intrinseca 2–12 cmH₂O | 1,5 – 11,2 cmH₂O secondo FR e Ti |
-| Michard | PPV sotto 13% in normovolemia, sopra in ipovolemia | 12% e 25% (volemia −20%) |
+| Serie cliniche BPCO | PEEP intrinseca 2–12 cmH₂O | 2,0 – 12,1 cmH₂O secondo FR e Ti |
+| Michard | PPV sotto 13% in normovolemia, sopra in ipovolemia | 9% e 18% (volemia −20%) |
 
 Il modello resta esplicativo: riproduce direzioni e ordini di grandezza, non le risposte del singolo paziente (per quello servono modelli multi-compartimentali calibrati su dati individuali, come il Nottingham Physiology Simulator).
 

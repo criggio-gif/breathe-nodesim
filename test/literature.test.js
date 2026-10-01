@@ -19,7 +19,7 @@ check('Anaesthetised healthy adult: textbook values', () => {
 	const m = new PhysiologyModel();
 	m.setVentilator({ FractionInspiredOxygen: 0.4, TidalVolume: 500, RespirationRate: 12 });
 	const o = run(m, 600);
-	within(o.crs, 45, 70, 'Crs (mL/cmH2O)');
+	within(o.crs, 60, 90, 'Crs (mL/cmH2O)');
 	within(o.pplat, 10, 18, 'Pplat (cmH2O)');
 	within(o.paco2, 35, 45, 'PaCO2 (mmHg)');
 	within(o.co, 4.5, 6.5, 'GC (L/min)');
@@ -141,7 +141,7 @@ check('Quasi-static P-V curve in the healthy anaesthetised lung: no lower inflec
 	const r = pvCurve();
 	assert(r.lip === null, 'LIP ' + r.lip);
 	assert(r.uip === null || r.uip >= 26, 'UIP ' + r.uip);
-	within(r.cLin, 45, 75, 'compliance lineare (mL/cmH2O)');
+	within(r.cLin, 60, 95, 'compliance lineare (mL/cmH2O)');
 });
 
 check('Decremental PEEP titration in recruitable ARDS: static compliance is highest at an intermediate PEEP (bell shape)', () => {
