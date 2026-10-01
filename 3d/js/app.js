@@ -6,7 +6,7 @@
 
 	const { PhysiologyModel, DEFAULT_PATIENT, DEFAULT_VENTILATOR } = window.BreathePhysiology;
 	const C = window.BreatheNodes;
-		const { VentConsole, BreathPlayer } = window.BreatheConsole;
+		const { VentConsole, BreathPlayer, drawPV } = window.BreatheConsole;
 		const FREEZABLE = new Set(window.BreathePhysiology.FREEZABLE);
 	const $ = id => document.getElementById(id);
 	const clone = o => JSON.parse(JSON.stringify(o));
@@ -294,7 +294,7 @@
 			e.u.textContent = typeof t.unit === 'function' ? t.unit(out) : t.unit;
 		});
 		measEls.forEach(e => { e.v.textContent = e.m[1](out); });
-				$('vent-mode-label').textContent = out.mode === 'SI' ? 'RECLUTAMENTO' : out.mode === 'CPAP' ? 'CPAP/ASB' : out.mode + (model.ventilator.AssistedMode === 0 ? '-AC' : '-CMV');
+				$('vent-mode-label').textContent = out.mode === 'SI' ? (out.override && out.override.type === 'PV' ? 'CURVA P-V' : 'RECLUTAMENTO') : out.mode === 'CPAP' ? 'CPAP/ASB' : out.mode + (model.ventilator.AssistedMode === 0 ? '-AC' : '-CMV');
 				syncOff();
 		vitalEls.forEach(e => {
 			e.v.textContent = e.vt[1](out);
@@ -304,7 +304,7 @@
 		});
 		const ov = out.override;
 		const inf = model.S.infusion > 0;
-		$('status').textContent = ov ? 'Insufflazione sostenuta in corso: ' + Math.ceil(ov.remaining) + ' s' : inf ? 'Infusione in corso: ' + Math.round(model.S.infusion) + ' mL rimanenti' : '';
+		$('status').textContent = ov ? (ov.type === 'PV' ? 'Curva P-V in corso: ' : 'Insufflazione sostenuta in corso: ') + Math.ceil(ov.remaining) + ' s' : inf ? 'Infusione in corso: ' + Math.round(model.S.infusion) + ' mL rimanenti' : '';
 		$('clock').textContent = fmtTime(out.t);
 	}
 
@@ -320,10 +320,12 @@
 		out = model.out;
 		ref = snapshot(out);
 		renderVent();
+		if (pvPanel && !pvPanel.hidden) renderPV();
 		if (selected) openCard(selected);
 	}
 
-	let lastFrame = null, acc = 0, lastUi = 0, lastUiSimT = 0;
+	let lastFrame = null, acc = 0, lastUi = 0, lastUiSimT = 0, lastPvT = 0, pvWatch = false;
+	let pvPanel = null, pvCanvas = null;
 	function frame(now) {
 		if (lastFrame === null) lastFrame = now;
 		const realDt = Math.min(0.1, (now - lastFrame) / 1000);
@@ -337,6 +339,16 @@
 		}
 		monitor.push(out, now);
 		monitor.draw(out);
+		if (!pvPanel.hidden) {
+			drawPV(pvCanvas, model.pv);
+			if (model.pv && model.pv.running && now - lastPvT > 250) { lastPvT = now; renderPV(); }
+		}
+		if (pvWatch && model.pv && !model.pv.running) {
+			pvWatch = false;
+			renderPV();
+			const r = model.pv.result;
+			if (r) toast('Curva P-V: LIP ' + (r.lip === null ? 'non evidente' : r.lip) + ', UIP ' + (r.uip === null ? 'non evidente' : r.uip) + ' cmH₂O');
+		}
 		if (now - lastUi > 250) {
 			lastUi = now;
 			space.setValues(out, ref, out.t - lastUiSimT, fmtNode);
@@ -355,6 +367,7 @@
 		}
 		space = new window.Space3D($('space-canvas'), $('labels'), C, openCard);
 		monitor = new VentConsole($('monitor'), { abp: true, loop: $('loop'), window: 8 });
+		pvPanel = $('pv-panel'); pvCanvas = $('pv-canvas');
 		wireConsole();
 		wireView();
 		$('card-power').addEventListener('click', () => { if (selected) toggleNode(selected); });
@@ -502,12 +515,69 @@
 			b.addEventListener('pointerleave', up);
 			b.addEventListener('click', ev => { if (ev.detail === 0) startHold(type); });
 		});
+		$('pv-key').addEventListener('click', () => openPV($('pv-panel').hidden));
+		$('pv-close').addEventListener('click', () => openPV(false));
+		$('pv-start').addEventListener('click', () => {
+			if (model.pv && model.pv.running) { model.stopOverride(); toast('Curva P-V interrotta'); }
+			else pvCurve();
+			renderPV();
+		});
 		$('freeze').addEventListener('click', () => {
 			const on = monitor.toggleFreeze();
 			$('freeze').setAttribute('aria-pressed', on);
 			$('freeze').classList.toggle('on', on);
 		});
 		renderHoldResults();
+	}
+
+	/* ------------------------------------------------------------ quasi-static P-V curve */
+
+	function pvCurve(opts) {
+		opts = opts || {};
+		const peep = model.ventilator.PositiveEndExpiratoryPressure;
+		const fromSel = opts.from !== undefined ? opts.from : $('pv-from').value;
+		const from = Math.round(Math.min(20, Math.max(0, fromSel === 'peep' ? peep : +fromSel || 0)));
+		const to = Math.round(Math.min(45, Math.max(from + 10, +(opts.to || $('pv-to').value) || 40)));
+		const rate = Math.min(5, Math.max(1, +(opts.rate || $('pv-rate').value) || 2));
+		ref = snapshot(out);
+		model.startPVCurve({ from, to, rate });
+		pvWatch = true;
+		space.cascade('peeptot', 1);
+		toast('Curva P-V: ' + from + ' → ' + to + ' cmH₂O, ' + Math.round(2 * (to - from) / rate) + ' s di apnea');
+		openPV(true);
+		return { from, to, rate };
+	}
+
+	function openPV(on) {
+		$('pv-panel').hidden = !on;
+		$('pv-key').classList.toggle('on', !!on);
+		$('pv-key').setAttribute('aria-expanded', !!on);
+		if (on) renderPV();
+	}
+
+	function renderPV() {
+		const pv = model.pv;
+		const box = $('pv-res'), st = $('pv-status');
+		if (pv && pv.running) {
+			const ov = model.override;
+			st.textContent = (ov && ov.phase === 'esp' ? 'desufflazione' : 'insufflazione') + (ov ? ' · ' + ov.pressure.toFixed(0) + ' cmH₂O' : '');
+		} else st.textContent = pv ? (pv.result ? 'completata' : 'interrotta') : '';
+		$('pv-start').textContent = pv && pv.running ? 'Interrompi' : 'Avvia';
+		const r = pv && pv.result;
+		if (!r) {
+			box.innerHTML = '<p class="hint">' + (pv && pv.running ? 'Manovra in corso: il paziente è in apnea.' : 'Apnea con rampa lenta di pressione, prima in salita e poi in discesa. Il ventilatore registra il volume a ogni pressione.') + '</p>';
+			return;
+		}
+		const row = (label, val, title) => '<div class="hr-row"' + (title ? ' title="' + title + '"' : '') + '><span>' + label + '</span>' + (val === null ? '<span class="na">—</span>' : '<b>' + val + '</b>') + '</div>';
+		const n = x => x === null ? null : (x % 1 ? x.toFixed(1) : String(x));
+		box.innerHTML = row('LIP cmH₂O', n(r.lip), 'Flesso inferiore: incrocio tra la tangente iniziale e quella del tratto più ripido della branca di insufflazione')
+			+ row('UIP cmH₂O', n(r.uip), 'Flesso superiore: incrocio tra la tangente del tratto più ripido e quella finale')
+			+ row('PMC desuffl.', n(r.pmc), 'Punto di massima curvatura della desufflazione: dove le unità iniziano a richiudersi')
+			+ row('C lineare', r.cLin.toFixed(0), 'mL/cmH₂O tra LIP e UIP')
+			+ row('Isteresi mL', r.hyst.toFixed(0), 'Massima distanza tra desufflazione e insufflazione alla stessa pressione')
+			+ row('V a ' + r.to + ' mL', r.vMax.toFixed(0))
+			+ '<p class="hint">' + (r.lip === null ? 'Nessun flesso inferiore: poco polmone da reclutare. ' : 'Il flesso inferiore indica reclutamento: sotto, le unità sono chiuse. ')
+			+ (r.uip === null ? 'Nessun flesso superiore entro ' + r.to + ' cmH₂O.' : 'Sopra ' + n(r.uip) + ' cmH₂O il polmone aerato si sovradistende.') + '</p>';
 	}
 
 	function measureHold(type) {
@@ -526,6 +596,8 @@
 		edit: (id, v) => applyEdit(id, editFor(id), v),
 		setNodeEnabled(id, enabled) { if ((id in model.frozen) === !enabled) return true; return toggleNode(id); },
 		holdManeuver(type) { startHold(type); return measureHold(type); },
+		pvCurve: opts => pvCurve(opts || { from: 0, to: 40, rate: 2 }),
+		get pv() { return model.pv; },
 		setView
 	};
 	init();
