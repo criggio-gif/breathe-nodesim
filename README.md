@@ -74,7 +74,8 @@ Le costanti di calibrazione sono raccolte in `CAL` (`js/physiology.js`) e `test/
 
 | Riferimento | Cosa si confronta | Modello |
 | --- | --- | --- |
-| Gattinoni 2006 (NEJM) | Polmone reclutabile 13 ± 11%, non reclutabile circa 24% | ARDS moderata: 16% reclutabile, 18% non reclutabile |
+| Hedenstierna (atelettasie da anestesia) | Nel sano in anestesia generale collassa circa il 5–10% del polmone; la PEEP lo riapre | Reclutabile 8%: aerazione 93% in ZEEP, 98% a PEEP 10 |
+| Gattinoni 2006 (NEJM) | Polmone reclutabile 13 ± 11%, non reclutabile circa 24% | ARDS moderata: 21% reclutabile, 18% non reclutabile |
 | Crotti 2001 (AJRCCM) | Pressioni di apertura circa 20 cmH₂O, di chiusura circa 5 cmH₂O, apertura molto dispersa | Apertura 23 (DS 8), chiusura 6 cmH₂O |
 | Gattinoni 1998 (AJRCCM) | Quota della parete toracica sull'elastanza: bassa nell'ARDS polmonare, alta con addome teso | ΔPpl/ΔPEEP: sano 0,44, ARDS 0,34, ARDS con IAP 20 mmHg 0,5 |
 | Chikhani 2016 (BJA) e serie cliniche | PEEP 0 → 20 nell'ARDS: DO₂ −25%, gittata −15/−36%, PaO₂ in aumento | DO₂ −20%, gittata −22%, PaO₂ +35 mmHg |

@@ -27,6 +27,13 @@ check('Anaesthetised healthy adult: textbook values', () => {
 	within(o.pvr, 0.8, 2.2, 'PVR (WU)');
 });
 
+check('Anaesthesia atelectasis (Hedenstierna): the healthy lung loses about 5-10% of aeration at ZEEP and PEEP 8-10 reopens most of it', () => {
+	const aer = peep => { const m = new PhysiologyModel(); m.setVentilator({ TidalVolume: 500, PositiveEndExpiratoryPressure: peep }); return run(m, 600).aeration; };
+	const zeep = aer(0), peep10 = aer(10);
+	within(100 - zeep, 4, 10, 'polmone non aerato in ZEEP (%)');
+	assert(peep10 - zeep > 3, 'aerazione ZEEP ' + zeep.toFixed(1) + ' → PEEP 10 ' + peep10.toFixed(1));
+});
+
 check('Gattinoni 2006: recruitable lung about 13 ± 11%, non-recruitable about 24% (moderate ARDS)', () => {
 	const o = new PhysiologyModel({ conditions: ARDS(0.6) }).out;
 	within(o.recruitable, 8, 24, 'polmone reclutabile (%)');

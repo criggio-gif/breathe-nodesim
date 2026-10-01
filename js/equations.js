@@ -65,8 +65,8 @@
 				'obesità = (BMI − 25)/15, limitata a 0–1,5. La pressione intra-addominale sopra 7 mmHg irrigidisce la parete toracica.')
 		],
 		lungdz: o => [
-			E(V('reclutabile', o.x.recruitable, 2, 'lungdz'), [K(0.03), '+', K(o.x.cal.recrArds), '·', V('ARDS', o.x.ards, 2), '+', K(0.15), '·', V('polmonite', o.x.pneu, 2), '+', K(0.08), '·', V('obesità', o.x.obes, 2), '+', K(0.006, 3), '·', V('IAP − 7', o.x.iapX, 1, 'iap')],
-				'Calibrato su Gattinoni 2006: reclutabile in media 13 ± 11% del polmone, non reclutabile circa 24%.'),
+			E(V('reclutabile', o.x.recruitable, 2, 'lungdz'), [K(o.x.cal.recr0), '+', K(o.x.cal.recrArds), '·', V('ARDS', o.x.ards, 2), '+', K(0.15), '·', V('polmonite', o.x.pneu, 2), '+', K(0.08), '·', V('obesità', o.x.obes, 2), '+', K(0.006, 3), '·', V('IAP − 7', o.x.iapX, 1, 'iap')],
+				'Base 8%: atelettasie del polmone sano in anestesia generale (Hedenstierna). ARDS calibrata su Gattinoni 2006: reclutabile in media 13 ± 11%, non reclutabile circa 24%.'),
 			E(V('consolidato', o.x.consolidated, 2), [K(o.x.cal.consArds), '·', V('ARDS', o.x.ards, 2), '+', K(0.35), '·', V('polmonite', o.x.pneu, 2)])
 		],
 		volemia: o => [

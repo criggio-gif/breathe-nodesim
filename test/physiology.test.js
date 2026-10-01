@@ -200,6 +200,18 @@ check('switched-off nodes: every freezable node can be frozen and the model stay
 	});
 });
 
+check('compliance follows aeration: at the same PEEP, less aerated lung gives a lower static compliance (also with the node switched off)', () => {
+	const crs = a => {
+		const m = new PhysiologyModel();
+		m.setVentilator({ TidalVolume: 500, PositiveEndExpiratoryPressure: 5 });
+		run(m, 300);
+		m.frozen.recruit = a;
+		return run(m, 60).crs;
+	};
+	const full = crs(1), low = crs(0.7);
+	assert(low < full * 0.85, 'Crs con aerazione 70% ' + low.toFixed(1) + ' vs 100% ' + full.toFixed(1));
+});
+
 let failed = 0;
 for (const c of checks) {
 	try { c.fn(); console.log('ok   ' + c.name); }
