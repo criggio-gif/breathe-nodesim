@@ -738,7 +738,7 @@ tr.best td { background: var(--accent-soft); font-weight: 600; }
 .monitor-wrap { position: relative; }
 .pv-panel {
 	position: absolute; top: 46px; left: 6px; bottom: 6px; right: 256px;
-	display: flex; flex-direction: column; background: rgba(4, 7, 10, 0.97);
+	display: flex; flex-direction: column; background: #04070a;
 	border: 1px solid #2c3b44; border-radius: 8px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55); z-index: 3;
 }
 .pv-panel[hidden] { display: none; }
@@ -885,7 +885,8 @@ tr.best td { background: var(--accent-soft); font-weight: 600; }
 	.app.console-mode .pv-panel { right: 256px; }
 }
 @media (max-width: 860px) {
-	.pv-panel, .app.console-mode .pv-panel { position: fixed; top: 12vh; left: 8px; right: 8px; bottom: 8px; width: auto; }
-	.pv-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(160px, 1fr) auto; }
-	.pv-side { border-left: 0; border-top: 1px solid #1a2328; max-height: 38vh; }
+	.pv-panel, .app.console-mode .pv-panel { position: fixed; top: 8px; left: 8px; right: 8px; bottom: 8px; width: auto; z-index: 30; }
+	.pv-body { display: flex; flex-direction: column; }
+	#pv-canvas { flex: none; height: 44vh; }
+	.pv-side { flex: 1; border-left: 0; border-top: 1px solid #1a2328; }
 }
