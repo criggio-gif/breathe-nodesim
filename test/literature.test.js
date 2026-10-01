@@ -119,6 +119,43 @@ check('Pulse pressure variation: below 13% when normovolemic, above it when hypo
 	within(ppv(0.8), 14, 35, 'PPV ipovolemia 20% (%)');
 });
 
+const pvCurve = (opts) => {
+	const m = new PhysiologyModel(opts);
+	m.setVentilator({ PositiveEndExpiratoryPressure: 5 });
+	run(m, 600);
+	m.startPVCurve({ from: 0, to: 40, rate: 2 });
+	while (m.override) m.step(0.1);
+	return m.pv.result;
+};
+
+check('Quasi-static P-V curve in ARDS (Ranieri 1994, Roupie 1995): lower inflection point about 10-20, upper about 25-32 cmH2O, hysteresis', () => {
+	const r = pvCurve({ conditions: ARDS(0.6) });
+	assert(r.lip !== null, 'LIP non trovato');
+	within(r.lip, 8, 20, 'LIP (cmH2O)');
+	within(r.uip, 24, 32, 'UIP (cmH2O)');
+	within(r.cLin, 30, 60, 'compliance lineare (mL/cmH2O)');
+	assert(r.hyst > 50, 'isteresi ' + r.hyst.toFixed(0) + ' mL');
+});
+
+check('Quasi-static P-V curve in the healthy anaesthetised lung: no lower inflection point, linear to about 25-30 cmH2O (Rahn relaxation curve)', () => {
+	const r = pvCurve();
+	assert(r.lip === null, 'LIP ' + r.lip);
+	assert(r.uip === null || r.uip >= 26, 'UIP ' + r.uip);
+	within(r.cLin, 45, 75, 'compliance lineare (mL/cmH2O)');
+});
+
+check('Decremental PEEP titration in recruitable ARDS: static compliance is highest at an intermediate PEEP (bell shape)', () => {
+	const m = new PhysiologyModel({ conditions: ARDS(0.6) });
+	m.setVentilator({ TidalVolume: 450, RespirationRate: 18, PositiveEndExpiratoryPressure: 5 });
+	run(m, 600);
+	m.startSustainedInflation(40, 40); run(m, 40);
+	const crs = {};
+	[24, 20, 16, 12, 8, 4].forEach(p => { m.setVentilator({ PositiveEndExpiratoryPressure: p }); crs[p] = run(m, 120).crs; });
+	const best = Object.keys(crs).reduce((a, b) => crs[b] > crs[a] ? b : a);
+	within(+best, 8, 18, 'PEEP a compliance massima');
+	assert(crs[24] < crs[best] * 0.85 && crs[4] < crs[best] * 0.95, 'Crs ' + JSON.stringify(crs));
+});
+
 let failed = 0;
 for (const c of checks) {
 	try { c.fn(); console.log('ok   ' + c.name); }

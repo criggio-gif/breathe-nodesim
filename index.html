@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400&display=swap">
-<link rel="stylesheet" href="css/style.css?v=13">
+<link rel="stylesheet" href="css/style.css?v=14">
 </head>
 <body>
 <div class="app">
@@ -141,12 +141,32 @@
 					<div class="vent-keys">
 						<button class="vkey" id="hold-insp" title="Clic: pausa di 2 s alla fine della prossima inspirazione (misura Pplat, compliance e resistenze). Tieni premuto per prolungarla, max 15 s.">Pausa insp.</button>
 						<button class="vkey" id="hold-exp" title="Clic: pausa di 3 s alla fine della prossima espirazione (misura PEEP totale e auto-PEEP). Tieni premuto per prolungarla, max 15 s.">Pausa esp.</button>
+						<button class="vkey" id="pv-key" aria-expanded="false" aria-controls="pv-panel" title="Curva pressione-volume quasi statica (low flow): flessi inferiore e superiore, compliance lineare, isteresi">Curva P-V</button>
 						<button class="vkey" id="freeze" aria-pressed="false" title="Congela le curve sullo schermo per analizzarle">Congela</button>
 					</div>
 				</div>
 				<div class="monitor-screen"><canvas id="monitor" aria-label="Curve di pressione, flusso, volume e pressione arteriosa"></canvas></div>
 				<div class="loop-screen"><canvas id="loop" aria-label="Loop pressione-volume"></canvas><div class="hold-results" id="hold-results"></div></div>
 				<div class="numerics" id="numerics"></div>
+				<div class="pv-panel" id="pv-panel" role="dialog" aria-label="Curva pressione-volume" hidden>
+					<div class="pv-head">
+						<strong>Curva P-V quasi statica</strong>
+						<span class="pv-status" id="pv-status" aria-live="polite"></span>
+						<button class="pv-x" id="pv-close" aria-label="Chiudi">&times;</button>
+					</div>
+					<div class="pv-body">
+						<canvas id="pv-canvas" aria-label="Branca di insufflazione e di desufflazione con i punti di flesso"></canvas>
+						<div class="pv-side">
+							<div class="pv-opts">
+								<label>Da <select id="pv-from"><option value="0">ZEEP</option><option value="peep">PEEP impostata</option></select></label>
+								<label>a <select id="pv-to"><option>30</option><option>35</option><option selected>40</option><option>45</option></select> cmH&#8322;O</label>
+								<label>rampa <select id="pv-rate"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="5">5</option></select> cmH&#8322;O/s</label>
+								<button class="vkey" id="pv-start">Avvia</button>
+							</div>
+							<div class="pv-res" id="pv-res"></div>
+						</div>
+					</div>
+				</div>
 			</div>
 			<div class="trends-wrap">
 				<div class="trends-head">
@@ -198,13 +218,13 @@
 	</aside>
 </div>
 
-<script src="js/physiology.js?v=13"></script>
-<script src="js/nodes.js?v=13"></script>
-<script src="js/graph.js?v=13"></script>
-<script src="js/monitor.js?v=13"></script>
-<script src="js/console.js?v=13"></script>
-<script src="js/equations.js?v=13"></script>
-<script src="js/app.js?v=13"></script>
-<script src="js/assistant.js?v=13"></script>
+<script src="js/physiology.js?v=14"></script>
+<script src="js/nodes.js?v=14"></script>
+<script src="js/graph.js?v=14"></script>
+<script src="js/monitor.js?v=14"></script>
+<script src="js/console.js?v=14"></script>
+<script src="js/equations.js?v=14"></script>
+<script src="js/app.js?v=14"></script>
+<script src="js/assistant.js?v=14"></script>
 </body>
 </html>

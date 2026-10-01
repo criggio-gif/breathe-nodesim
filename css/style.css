@@ -734,6 +734,30 @@ tr.best td { background: var(--accent-soft); font-weight: 600; }
 .hr-row b { font: 600 15px var(--font-mono); color: #f4c542; font-variant-numeric: tabular-nums; }
 .hr-row i { font-style: normal; font-size: 10.5px; color: #8a9aa5; }
 
+/* quasi-static P-V curve: panel over the waveform screen (and the loop, in the console-only view) */
+.monitor-wrap { position: relative; }
+.pv-panel {
+	position: absolute; top: 46px; left: 6px; bottom: 6px; right: 256px;
+	display: flex; flex-direction: column; background: rgba(4, 7, 10, 0.97);
+	border: 1px solid #2c3b44; border-radius: 8px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55); z-index: 3;
+}
+.pv-panel[hidden] { display: none; }
+.pv-head { display: flex; align-items: center; gap: 10px; padding: 5px 6px 5px 10px; border-bottom: 1px solid #1a2328; }
+.pv-head strong { font: 700 12px var(--font-cond); letter-spacing: 0.08em; text-transform: uppercase; color: #f4c542; }
+.pv-status { flex: 1; min-width: 0; font: 500 11px var(--font-mono); color: #4fd4ef; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pv-x { background: none; border: 0; color: #9fb1bd; font-size: 20px; line-height: 1; cursor: pointer; padding: 0 6px; }
+.pv-x:hover { color: #fff; }
+.pv-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 168px; }
+#pv-canvas { width: 100%; height: 100%; min-height: 0; display: block; }
+.pv-side { border-left: 1px solid #1a2328; padding: 6px 8px; overflow-y: auto; min-height: 0; font-size: 12px; color: #c9d6de; }
+.pv-opts { display: grid; gap: 5px; padding-bottom: 6px; border-bottom: 1px solid #1a2328; margin-bottom: 6px; }
+.pv-opts label { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: #9fb1bd; }
+.pv-opts select { background: #0f171c; color: #e6edf2; border: 1px solid #2c3b44; border-radius: 4px; font: 500 12px var(--font-mono); padding: 1px 3px; }
+.pv-opts .vkey { min-height: 26px; padding: 3px 8px; }
+.pv-res .hr-row { grid-template-columns: 1fr auto; }
+.pv-res .hint { color: #8a9aa5; font-size: 11.5px; margin: 6px 0 0; line-height: 1.35; }
+.pv-res .na { font: 500 12px var(--font-mono); color: #8a9aa5; }
+
 /* network only: the console and the trends are hidden, the graph takes the stage in its ordered layout */
 .app.network-mode .bedside { display: none; }
 .app.network-mode .stage { grid-template-rows: minmax(0, 1fr); }
@@ -754,6 +778,7 @@ tr.best td { background: var(--accent-soft); font-weight: 600; }
 	grid-template-areas: "head head head" "screen loop nums";
 }
 .app.console-mode .loop-screen { display: flex; }
+.app.console-mode .pv-panel { right: 296px; }
 .app.console-mode .numerics { grid-template-columns: 1fr 1fr; }
 .app.console-mode .num-val { font-size: 21px; }
 
@@ -855,4 +880,12 @@ tr.best td { background: var(--accent-soft); font-weight: 600; }
 	.trends, .app.console-mode .trends { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 	.vent-keys { width: 100%; }
 	.vkey { flex: 1; }
+}
+@media (max-width: 1100px) {
+	.app.console-mode .pv-panel { right: 256px; }
+}
+@media (max-width: 860px) {
+	.pv-panel, .app.console-mode .pv-panel { position: fixed; top: 12vh; left: 8px; right: 8px; bottom: 8px; width: auto; }
+	.pv-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(160px, 1fr) auto; }
+	.pv-side { border-left: 0; border-top: 1px solid #1a2328; max-height: 38vh; }
 }

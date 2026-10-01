@@ -125,8 +125,11 @@
 		ccw0: 120,          // chest wall compliance, supine anaesthetised (mL/cmH2O)
 		iapThreshold: 7,    // intra-abdominal pressure above which the abdomen loads the chest wall (mmHg)
 		recr0: 0.08,        // anaesthesia atelectasis in the healthy supine lung (Hedenstierna: about 5-10%)
+		kneeFrac: 0.45,     // upper inflection point: fraction of the aerated lung's capacity where tissue starts to stiffen
+		vmaxArds: 0.2,      // ARDS: smaller capacity of the aerated units (oedema), so the upper inflection point comes earlier
+		odStart: 0.55,      // overdistension index: filling of the aerated capacity where alveolar capillaries start to be compressed
 		recrArds: 0.22, consArds: 0.3,
-		pOpen0: 16, pOpenArds: 12, sdOpen: 8,
+		pOpen0: 16, pOpenArds: 6, sdOpen: 6,
 		pClose0: 4, pCloseArds: 4, sdClose: 3.5,
 		pmsf0: 15, rapRef: 5, // spontaneously breathing reference: Pmsf and right atrial pressure (mmHg)
 		pmsfPpl: 0.15,      // share of the rise in pleural pressure passed to Pmsf (abdominal compression)
@@ -134,6 +137,79 @@
 		obesFrc: 0.9, obesVo2: 0.3,
 		co2Store: 45        // body CO2 stores that buffer PaCO2 (mL per mmHg): apnea raises PaCO2 by ~3-5 mmHg/min
 	};
+
+	/*
+	 * Analysis of a quasi-static P-V curve (points {p, v, phase}), with the intersection-of-tangents method
+	 * used at the bedside (Ranieri 1994, Roupie 1995). Each limb is resampled every 1 cmH2O; compliance is
+	 * the slope over ±2 cmH2O.
+	 *   LIP (lower inflection point): where the initial, flatter tangent of the inflation limb meets the
+	 *        tangent of its steepest part; reported only if the steepest part is ≥ 20% steeper;
+	 *   UIP (upper inflection point): where the tangent of the steepest part meets the final tangent;
+	 *        reported only if the curve ends ≥ 20% flatter;
+	 *   PMC (deflation point of maximum curvature): on deflation, where the linear part (halfway to the UIP)
+	 *        meets the steeper low-pressure part (units closing: derecruitment); reported only if that part is ≥ 20% steeper;
+	 *   hysteresis: largest volume difference between deflation and inflation at equal pressure.
+	 */
+	function analysePV(points) {
+		const limb = phase => {
+			const pts = points.filter(q => q.phase === phase).sort((a, b) => a.p - b.p);
+			if (pts.length < 3) return null;
+			const lo = Math.ceil(pts[0].p - 1e-6), hi = Math.floor(pts[pts.length - 1].p + 1e-6);
+			const at = x => {
+				let j = 1;
+				while (j < pts.length - 1 && pts[j].p < x) j++;
+				const a = pts[j - 1], b = pts[j];
+				return b.p === a.p ? b.v : a.v + (b.v - a.v) * (x - a.p) / (b.p - a.p);
+			};
+			const grid = [];
+			for (let x = lo; x <= hi; x++) grid.push({ p: x, v: at(x) });
+			grid.forEach((g, i) => {
+				const a = grid[Math.max(0, i - 2)], b = grid[Math.min(grid.length - 1, i + 2)];
+				g.c = b.p > a.p ? (b.v - a.v) / (b.p - a.p) : 0;
+			});
+			return grid;
+		};
+		//tangent at grid point i: {p, v, c}; meet(t1, t2) = pressure where the two tangents cross
+		const meet = (t1, t2) => Math.abs(t1.c - t2.c) < 1e-9 ? null : (t2.v - t1.v + t1.c * t1.p - t2.c * t2.p) / (t1.c - t2.c);
+		const round = x => x === null || !isFinite(x) ? null : Math.round(x * 2) / 2;
+		const ins = limb('insp'), dfl = limb('esp');
+		if (!ins || ins.length < 8) return null;
+		const n = ins.length, pLo = ins[0].p, pHi = ins[n - 1].p;
+		let iMax = 2;
+		for (let i = 2; i < n - 2; i++) if (ins[i].c > ins[iMax].c) iMax = i;
+		const tMax = ins[iMax], tStart = ins[2], tEnd = ins[n - 3];
+		let lip = tMax.c >= 1.2 * tStart.c ? round(meet(tStart, tMax)) : null;
+		let uip = tEnd.c <= 0.8 * tMax.c ? round(meet(tMax, tEnd)) : null;
+		if (lip !== null && (lip <= pLo || lip >= pHi)) lip = null;
+		if (uip !== null && (uip <= pLo || uip >= pHi)) uip = null;
+		const vAt = (grid, x) => {
+			const i = Math.max(0, Math.min(grid.length - 2, Math.floor(x - grid[0].p)));
+			return grid[i].v + (grid[i + 1].v - grid[i].v) * (x - grid[i].p);
+		};
+		const pa = lip !== null ? lip : pLo, pb = uip !== null ? uip : pHi;
+		const cLin = (vAt(ins, pb) - vAt(ins, pa)) / Math.max(1, pb - pa);
+		let hyst = 0, hystP = null, pmc = null, recruitedAtStart = 0;
+		if (dfl && dfl.length >= 8) {
+			dfl.forEach(g => {
+				const q = ins.find(r => r.p === g.p);
+				if (q && g.v - q.v > hyst) { hyst = g.v - q.v; hystP = g.p; }
+			});
+			//linear part of deflation: halfway between the low end and the UIP
+			const iLin = Math.max(3, Math.min(dfl.length - 3, Math.round(((uip !== null ? uip : pHi) + pLo) / 2 - dfl[0].p)));
+			const tLow = dfl[2];
+			if (tLow.c >= 1.2 * dfl[iLin].c) {
+				pmc = round(meet(tLow, dfl[iLin]));
+				if (pmc !== null && (pmc <= pLo || pmc >= pHi)) pmc = null;
+			}
+			const d0 = dfl.find(r => r.p === pLo);
+			if (d0) recruitedAtStart = d0.v - ins[0].v;
+		}
+		return {
+			lip, uip, pmc, cLin, cStart: tStart.c, cMax: tMax.c, cEnd: tEnd.c, hyst, hystP, recruitedAtStart, from: pLo, to: pHi,
+			vMax: Math.max.apply(null, ins.map(q => q.v)),
+			insp: ins.map(q => ({ p: q.p, v: q.v })), esp: dfl ? dfl.map(q => ({ p: q.p, v: q.v })) : []
+		};
+	}
 
 	class PhysiologyModel {
 
@@ -143,7 +219,8 @@
 			this.ventilator = Object.assign({}, DEFAULT_VENTILATOR, opts.ventilator || {});
 			this.conditions = clone(opts.conditions || {});
 			this.actions = Object.assign({}, DEFAULT_ACTIONS, opts.actions || {});
-			this.override = null; // sustained inflation (recruitment maneuver)
+			this.override = null; // sustained inflation (recruitment maneuver) or P-V curve ramp
+			this.pv = null;       // last P-V curve: points and analysis
 			this.frozen = {};     // switched-off nodes: node id -> value held (model units)
 			this.reset();
 		}
@@ -215,7 +292,25 @@
 		startSustainedInflation(pressure, duration) {
 			this.override = { type: 'SI', pressure: pressure, remaining: duration, duration: duration };
 		}
-		stopOverride() { this.override = null; }
+		stopOverride() {
+			if (this.override && this.override.type === 'PV' && this.pv) this.pv.running = false;
+			this.override = null;
+		}
+
+		/*
+		 * Quasi-static pressure-volume curve (as the low-flow / P-V tools of ICU ventilators): no tidal
+		 * ventilation, airway pressure ramps from `from` to `to` and back at `rate` cmH2O/s. Each step
+		 * records the static volume above the starting one; at the end analysePV finds the inflection points.
+		 */
+		startPVCurve(opts) {
+			const o = opts || {};
+			const from = clamp(o.from === undefined ? 0 : +o.from, 0, 25);
+			const to = clamp(o.to === undefined ? 40 : +o.to, from + 10, 50);
+			const rate = clamp(o.rate === undefined ? 2 : +o.rate, 1, 5);
+			const duration = 2 * (to - from) / rate;
+			this.override = { type: 'PV', pressure: from, from, to, rate, t: 0, duration, remaining: duration, phase: 'insp' };
+			this.pv = { from, to, rate, duration, points: [], v0: null, running: true, result: null, tStart: this.t };
+		}
 
 		/* ----------------------------------------------------- derived constants */
 
@@ -275,16 +370,31 @@
 			m.aerInsp = m.aerExp + m.recruitable * (openCycleMax - S.open);
 			m.tidalRecruit = m.recruitable * (openCycleMax - S.open);
 
-			//Aerated ("baby") lung pressure-volume curve (Salazar-Knowles) + linear chest wall
-			const vmaxSpec = 42 * (1 + 0.35 * d.copdE) * (1 - 0.45 * d.fib);
+			/*
+			 * Aerated ("baby") lung pressure-volume curve + linear chest wall. The open tissue has a
+			 * constant compliance C0 up to the upper inflection point (a fraction kneeFrac of its
+			 * capacity Vmax); beyond it compliance falls as (1 − u)² to zero at Vmax:
+			 *   P = V/C0                                    for V <= Vk
+			 *   P = V/C0 + (Vspan/C0)·(u/(1 − u) − u)      u = (V − Vk)/Vspan, Vspan = Vmax − Vk
+			 * Both C0 and Vmax scale with the aerated fraction, so recruitment enlarges the curve: the
+			 * lower inflection point of the whole respiratory system emerges from recruitment itself
+			 * (units opening as pressure crosses their opening pressure, Hickling 1998), not from the tissue.
+			 */
+			const vmaxSpec = 42 * (1 + 0.35 * d.copdE) * (1 - 0.45 * d.fib) * (1 - CAL.vmaxArds * d.ards);
 			const clSpec = 1.5 * (1 + 0.9 * d.copdE) * (1 - 0.6 * d.fib) * (1 - 0.3 * d.ards);
-			const aerPV = 0.5 * (m.aerExp + m.aerInsp);
+			//static pressure (sustained inflation, PV maneuver): the lung is as open as that pressure makes it
+			const aerPV = this.override ? m.aerInsp : 0.5 * (m.aerExp + m.aerInsp);
 			const vmax = Math.max(200, vmaxSpec * d.pbw * aerPV);
-			const k = clSpec / vmaxSpec;
+			const c0 = Math.max(5, clSpec * d.pbw * aerPV);
+			const vk = CAL.kneeFrac * vmax, vspan = vmax - vk;
 			const ccw = m.ccw;
-			const pawOfV = V => -Math.log(1 - Math.min(V, vmax * 0.999) / vmax) / k + V / ccw;
+			const plOfV = V => {
+				const u = Math.min(0.999, Math.max(0, (V - vk) / vspan));
+				return V / c0 + (u > 0 ? vspan / c0 * (u / (1 - u) - u) : 0);
+			};
+			const pawOfV = V => plOfV(Math.min(V, vmax * 0.999)) + V / ccw;
 			const vOfPaw = p => p <= 0 ? 0 : invert(pawOfV, p, 0, vmax * 0.999, 40);
-			m.vmax = vmax;
+			m.vmax = vmax; m.c0 = c0; m.vk = vk; m.aerPV = aerPV;
 
 			const leak = A['Ventilator Leak'] || 0;
 			const peepSet = Math.max(0, v.PositiveEndExpiratoryPressure * (1 - 0.5 * leak));
@@ -439,7 +549,7 @@
 			m.eelv = this.fz('eelv', m.frc + m.vpeep);
 			m.strain = this.fz('strain', (m.vt + m.vpeep) / m.frc);
 			m.fillInsp = (m.vpeep + m.vt) / vmax;
-			m.overdist = this.fz('overdist', clamp((m.fillInsp - 0.55) / 0.35, 0, 1));
+			m.overdist = this.fz('overdist', clamp((m.fillInsp - CAL.odStart) / 0.35, 0, 1));
 			m.dp = this.fz('dp', m.pplat - m.peepTot);
 			return m;
 		}
@@ -656,7 +766,21 @@
 			const d = this.derive();
 			const v = this.ventilator;
 
-			if (this.override) {
+			if (this.override && this.override.type === 'PV') {
+				//the ramp starts and ends exactly at `from`, the step after the last point closes the maneuver
+				const ov = this.override;
+				if (ov.t > ov.duration + 1e-9) {
+					this.pv.running = false;
+					this.pv.result = analysePV(this.pv.points);
+					this.override = null;
+				} else {
+					const half = ov.duration / 2;
+					const up = ov.t <= half + 1e-6;
+					ov.phase = up ? 'insp' : 'esp';
+					ov.pressure = up ? Math.min(ov.to, ov.from + ov.rate * ov.t) : Math.max(ov.from, ov.to - ov.rate * (ov.t - half));
+					ov.t += dt; ov.remaining = Math.max(0, ov.duration - ov.t);
+				}
+			} else if (this.override) {
 				this.override.remaining -= dt;
 				if (this.override.remaining <= 0) this.override = null;
 			}
@@ -678,6 +802,16 @@
 			const rise = Math.min(openInsp, keep);
 			if (S.open < rise && duty > 0) S.open = relax(S.open, rise, dt, 5 / duty);
 			else if (S.open > keep) S.open = relax(S.open, keep, dt, 40);
+
+			//quasi-static P-V curve: record the static volume at the current ramp pressure
+			let pvVol = null;
+			if (this.override && this.override.type === 'PV') {
+				const pv = this.pv;
+				if (pv.v0 === null) pv.v0 = m.vpeep;
+				pvVol = m.vpeep - pv.v0;
+				pv.flow = pv.points.length ? (pvVol - pv.points[pv.points.length - 1].v) / dt * 0.06 : 0; // L/min
+				pv.points.push({ p: this.override.pressure, v: pvVol, phase: this.override.phase });
+			}
 
 			const h = this.hemodynamics(d, m);
 			const g = this.gasExchange(d, m, h, v);
@@ -722,6 +856,7 @@
 				t: this.t,
 				mode: m.mode,
 				override: this.override ? Object.assign({}, this.override) : null,
+				pvVol: pvVol, pvFlow: pvVol === null ? 0 : this.pv.flow,
 				frozen: Object.keys(this.frozen),
 				//ventilator & patient inputs
 				peepSet: v.PositiveEndExpiratoryPressure,
@@ -759,7 +894,7 @@
 					vstat: m.vstat || 0, teff: m.teff || 0, expTe: m.expTe || 0, vtrap: m.vtrap || 0,
 					consolidated: m.consolidated, recruitable: m.recruitable, open: S.open, openInsp: openInsp, keep: keep,
 					pOpen: m.pOpen, pClose: m.pClose, aerExp: m.aerExp, aerInsp: m.aerInsp,
-					vpeep: m.vpeep, vmax: m.vmax, fillInsp: m.fillInsp, frc: m.frc, ppl0: m.ppl0, vMeanAbove: m.vMeanAbove,
+					vpeep: m.vpeep, vmax: m.vmax, c0: m.c0, vk: m.vk, aerPV: m.aerPV, fillInsp: m.fillInsp, frc: m.frc, ppl0: m.ppl0, vMeanAbove: m.vMeanAbove,
 					pmusMean: m.pmusMean || 0, pplPlat: m.ppl0 + (m.vpeep + m.vt) / m.ccw,
 					nonAerMean: g.nonAerMean, lowVQ: g.lowVQ, cc: g.cc, clow: g.clow, plow: g.plow, pvo2: g.pvo2,
 					avd: g.vo2 / (10 * h.co), vo2Demand: g.vo2, vco2: g.vco2, vdAnat: g.vdAnat, vdAlv: g.vdAlvFrac, zone1: g.zone1,
@@ -778,7 +913,7 @@
 		}
 	}
 
-	const api = { PhysiologyModel, FREEZABLE: Object.keys(FREEZE), DEFAULT_PATIENT, DEFAULT_VENTILATOR, DEFAULT_ACTIONS, satFromPO2, o2Content,
+	const api = { PhysiologyModel, analysePV, FREEZABLE: Object.keys(FREEZE), DEFAULT_PATIENT, DEFAULT_VENTILATOR, DEFAULT_ACTIONS, satFromPO2, o2Content,
 		po2FromContent, CMH2O_TO_MMHG };
 	if (typeof module !== 'undefined' && module.exports) module.exports = api;
 	else global.BreathePhysiology = api;

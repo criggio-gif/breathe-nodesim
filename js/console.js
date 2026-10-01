@@ -30,6 +30,10 @@
 	 */
 	function buildBreath(o) {
 		const pe = o.x.peepE;
+		//P-V curve: the airway pressure ramp, slow inflation flow and volume above the starting one
+		if (o.override && o.override.type === 'PV') {
+			return { flat: true, pv: true, p: o.pplat, dur: 0.1, pe, V0: 0, C: Math.max(5, o.crs), ti: 0, te: 0.1, vol: o.pvVol || 0, flow: o.pvFlow || 0 };
+		}
 		if (o.mode === 'SI' || !(o.rr > 0)) {
 			const p = o.mode === 'SI' ? o.pplat : pe;
 			return { flat: true, p, dur: 1, pe, V0: 0, C: Math.max(5, o.crs), ti: 0, te: 1 };
@@ -193,7 +197,7 @@
 
 		sample() {
 			const s = this.seg, b = s.b;
-			if (s.kind === 'flat') return { paw: b.p, flow: 0, vol: 0, phase: 'flat' };
+			if (s.kind === 'flat') return b.pv ? { paw: b.p, flow: b.flow, vol: b.vol, phase: 'pv' } : { paw: b.p, flow: 0, vol: 0, phase: 'flat' };
 			if (s.kind === 'ihold' || s.kind === 'ehold') return Object.assign(this.holdSample(s, s.t), { phase: s.kind });
 			const a = s.kind === 'insp' ? b.insp : b.exp;
 			const n = a.p.length;
@@ -285,7 +289,7 @@
 			//small cardiogenic oscillations, visible when flow is low
 			const beat = Math.sin(2 * Math.PI * this.beatPhase);
 			const quiet = smp.phase !== 'insp' || o.mode !== 'VC' ? 1 : 0;
-			const flow = smp.flow + (smp.phase === 'ihold' || smp.phase === 'ehold' ? 0 : quiet * 0.9 * beat * Math.exp(-Math.abs(smp.flow) / 8));
+			const flow = smp.flow + (smp.phase === 'ihold' || smp.phase === 'ehold' || smp.phase === 'pv' ? 0 : quiet * 0.9 * beat * Math.exp(-Math.abs(smp.flow) / 8));
 			const paw = smp.paw + 0.12 * beat;
 			//per-breath measurements
 			if (smp.phase === 'insp' && prevPhase !== 'insp' && prevPhase !== null) {
@@ -320,7 +324,7 @@
 					fmax = niceCeil(fmax * 1.1, 20);
 					return [-fmax, fmax];
 				})(),
-				vol: [0, Math.max(300, niceCeil((b && b.vt ? b.vt : o.vt) * 1.25, 100))],
+				vol: [0, b && b.pv ? Math.max(600, niceCeil(Math.max(b.vol, 0) * 1.2 + 100, 400)) : Math.max(300, niceCeil((b && b.vt ? b.vt : o.vt) * 1.25, 100))],
 				abp: [Math.max(0, Math.floor((o.dbp - 25) / 20) * 20), Math.max(120, niceCeil(o.sbp + 15, 20))]
 			};
 			this.traces.forEach(tr => {
@@ -415,13 +419,13 @@
 						ctx.fillRect(run.x0, y0, run.x1 - run.x0, bandH);
 						ctx.fillStyle = '#fff';
 						ctx.font = '600 10px "IBM Plex Sans Condensed", "Arial Narrow", sans-serif';
-						ctx.fillText(run.ph === 'ihold' ? 'PAUSA INSP.' : 'PAUSA ESP.', run.x0 + 4, y0 + bandH - 6);
+						ctx.fillText(run.ph === 'ihold' ? 'PAUSA INSP.' : run.ph === 'pv' ? 'CURVA P-V' : 'PAUSA ESP.', run.x0 + 4, y0 + bandH - 6);
 						run = null;
 					};
 					let px = null;
 					tr.buf.forEach(p => {
 						const x = X(p.x);
-						const hold = p.ph === 'ihold' || p.ph === 'ehold';
+						const hold = p.ph === 'ihold' || p.ph === 'ehold' || p.ph === 'pv';
 						if (px !== null && x < px) flush();
 						if (hold) { if (!run || run.ph !== p.ph) { flush(); run = { x0: x, x1: x, ph: p.ph }; } run.x1 = x; }
 						else flush();
@@ -476,7 +480,100 @@
 		}
 	}
 
-	const api = { buildBreath, BreathPlayer, VentConsole };
+	/*
+	 * Quasi-static P-V curve (pv = model.pv: points, result, running, from, to): inflation limb in
+	 * yellow, deflation in cyan, inflection points as dashed lines, linear compliance as a white segment.
+	 */
+	function drawPV(canvas, pv) {
+		if (!canvas.clientWidth || canvas.clientHeight < 40) return;
+		const { ctx, w, h } = setupCanvas(canvas);
+		ctx.fillStyle = '#04070a';
+		ctx.fillRect(0, 0, w, h);
+		if (!pv || !pv.points.length) {
+			ctx.fillStyle = 'rgba(255,255,255,0.5)';
+			ctx.font = '500 12px "IBM Plex Sans Condensed", "Arial Narrow", sans-serif';
+			ctx.textAlign = 'center';
+			ctx.fillText(pv && pv.running ? 'In attesa dei primi punti…' : 'Nessuna curva: premi Avvia', w / 2, h / 2);
+			ctx.textAlign = 'left';
+			return;
+		}
+		const pts = pv.points;
+		const vMin = Math.min(0, ...pts.map(q => q.v)), vTop = Math.max(400, ...pts.map(q => q.v));
+		const vMax = niceCeil(vTop * 1.08, vTop > 1500 ? 500 : 250), vLo = vMin < 0 ? -niceCeil(-vMin, 100) : 0;
+		const pMax = niceCeil(pv.to + 2, 5);
+		const L = 46, B = 26, T = 10, Rm = 10;
+		const X = p => L + p / pMax * (w - L - Rm);
+		const Y = v => T + (1 - (v - vLo) / (vMax - vLo)) * (h - T - B);
+		ctx.font = '500 10px "IBM Plex Mono", ui-monospace, monospace';
+		ctx.lineWidth = 1;
+		for (let p = 0; p <= pMax; p += 5) {
+			const x = Math.round(X(p)) + 0.5;
+			ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+			ctx.beginPath(); ctx.moveTo(x, T); ctx.lineTo(x, h - B); ctx.stroke();
+			ctx.fillStyle = 'rgba(255,255,255,0.45)';
+			ctx.textAlign = 'center';
+			if (p % 10 === 0) ctx.fillText(String(p), x, h - B + 13);
+		}
+		const vStep = vMax > 1500 ? 500 : 250;
+		ctx.textAlign = 'right';
+		for (let v = vLo; v <= vMax + 1e-9; v += vStep) {
+			const y = Math.round(Y(v)) + 0.5;
+			ctx.strokeStyle = v === 0 ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.06)';
+			ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(w - Rm, y); ctx.stroke();
+			ctx.fillStyle = 'rgba(255,255,255,0.45)';
+			ctx.fillText(String(v), L - 6, y + 3.5);
+		}
+		ctx.textAlign = 'left';
+		ctx.fillStyle = 'rgba(255,255,255,0.5)';
+		ctx.fillText('cmH₂O', w - Rm - 40, h - 4);
+		ctx.fillText('mL', L + 6, T + 10);
+		const r = pv.result;
+		//inflection points
+		const mark = (p, label, color) => {
+			if (p === null || p === undefined) return;
+			const x = Math.round(X(p)) + 0.5;
+			ctx.strokeStyle = color; ctx.setLineDash([4, 4]); ctx.lineWidth = 1.2;
+			ctx.beginPath(); ctx.moveTo(x, T); ctx.lineTo(x, h - B); ctx.stroke();
+			ctx.setLineDash([]);
+			ctx.fillStyle = color;
+			ctx.font = '700 11px "IBM Plex Sans Condensed", "Arial Narrow", sans-serif';
+			ctx.fillText(label + ' ' + p, Math.min(x + 4, w - Rm - 50), T + 12);
+		};
+		if (r) {
+			mark(r.lip, 'LIP', '#7dff9a');
+			mark(r.uip, 'UIP', '#ff7a7a');
+			mark(r.pmc, 'PMC', '#4fd4ef');
+			//linear compliance between the inflection points
+			const vAt = (arr, p) => { const q = arr.find(z => z.p === Math.round(p)); return q ? q.v : null; };
+			const pa = r.lip !== null ? r.lip : r.from, pb = r.uip !== null ? r.uip : r.to;
+			const va = vAt(r.insp, pa);
+			if (va !== null) {
+				ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1; ctx.setLineDash([2, 3]);
+				ctx.beginPath(); ctx.moveTo(X(pa - 3), Y(va - 3 * r.cLin)); ctx.lineTo(X(pb + 3), Y(va + (pb - pa + 3) * r.cLin)); ctx.stroke();
+				ctx.setLineDash([]);
+			}
+		}
+		const limb = (phase, color) => {
+			const a = pts.filter(q => q.phase === phase);
+			if (a.length < 2) return;
+			ctx.beginPath();
+			a.forEach((q, i) => { const x = X(q.p), y = Y(q.v); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+			ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
+		};
+		limb('insp', '#f4c542');
+		limb('esp', '#4fd4ef');
+		if (pv.running) {
+			const q = pts[pts.length - 1];
+			ctx.fillStyle = '#fff';
+			ctx.beginPath(); ctx.arc(X(q.p), Y(q.v), 3.5, 0, 2 * Math.PI); ctx.fill();
+		}
+		//legend
+		ctx.font = '600 11px "IBM Plex Sans Condensed", "Arial Narrow", sans-serif';
+		ctx.fillStyle = '#f4c542'; ctx.fillText('— insufflazione', L + 6, T + 28);
+		ctx.fillStyle = '#4fd4ef'; ctx.fillText('— desufflazione', L + 6, T + 42);
+	}
+
+	const api = { buildBreath, BreathPlayer, VentConsole, drawPV };
 	if (typeof module !== 'undefined' && module.exports) module.exports = api;
 	else global.BreatheConsole = api;
 })(typeof window !== 'undefined' ? window : globalThis);

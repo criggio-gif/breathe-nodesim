@@ -41,6 +41,7 @@ node test/equations.test.js
 - **Paziente, condizioni e azioni** con i nomi di `data.Patient`, `data.Condition` (ARDS, Pneumonia, COPD, Pulmonary Fibrosis, Pulmonary Shunt, Pericardial Effusion, Chronic Anemia, Chronic Ventricular Systolic Disfunction) e `data.Action` (Bronchoconstriction, Airway Obstruction, Acute Stress, Ventilator Leak). In più: volemia e sedazione.
 - **Importazione** di un paziente da `breathe.engine/resources/patients/*.json` o da uno stato `breathe.engine/states/*.json` (sezione `InitialPatient`, come in `Patient.loadPatientData`).
 - **Console del ventilatore** (`js/console.js`): curve di pressione, flusso, volume e pressione arteriosa integrate respiro per respiro su un polmone RC (flusso costante con pausa di fine inspirazione in VC, flusso decelerato in PC, trigger e ciclaggio al 25% del picco di flusso in pressione di supporto, espirazione passiva), con scale graduate, loop pressione-volume e tasto **Congela**. Valori misurati come su un ventilatore da terapia intensiva: Ppicco, Pplat, Pmedia, PEEP, VTe, VM, FR.
+- **Curva P-V quasi statica** (tasto **Curva P-V**), come i tool low-flow dei ventilatori da terapia intensiva: in apnea la pressione sale lentamente (1–5 cmH₂O/s) da ZEEP o dalla PEEP fino a 30–45 cmH₂O e poi ridiscende. Il pannello mostra la branca di insufflazione e quella di desufflazione, il flesso inferiore (LIP) e superiore (UIP) col metodo delle tangenti, il punto di massima curvatura in desufflazione, la compliance lineare e l'isteresi.
 - **Pause inspiratoria ed espiratoria**, sul modello dei tasti "Insp. hold" ed "Exp. hold" dei ventilatori Dräger: clic per una pausa di 2 s (inspiratoria) o 3 s (espiratoria), tieni premuto per prolungarla fino a 15 s. La pausa inspiratoria misura Pplat, ΔP, compliance statica e resistenze; quella espiratoria PEEP totale, auto-PEEP e volume intrappolato. `test/console.test.js` verifica che le misure coincidano con il modello.
 - **Viste**: "Rete + console", "Solo console" (nasconde i nodi e ingrandisce la console, con loop P-V e risultati delle pause) e "Solo rete" (nasconde console e trend e mostra i nodi nelle loro colonne in ordine; la disposizione personalizzata torna uscendo dalla vista).
 - **Nodi disattivabili**: con l'interruttore sul nodo (o dalla sua scheda) un nodo si disattiva: resta fermo al valore che aveva, non risente dei nodi a monte e non trasmette variazioni a valle; diventa grigio e i suoi collegamenti si interrompono. Serve a vedere cosa succede senza un meccanismo (per esempio PEEP senza trasmissione alla pleura, emorragia senza riflesso simpatico). Si possono disattivare tutti i nodi calcolati; impostazioni e caratteristiche del paziente no.
@@ -51,7 +52,7 @@ node test/equations.test.js
 - **Equazioni dal vivo**: dal pannello di un nodo (o con un doppio clic sul nodo) si apre una lavagna con le equazioni del modello per quel nodo, in forma simbolica e con i valori attuali del paziente sostituiti. I numeri si aggiornano in tempo reale e lampeggiano quando cambiano; ogni variabile porta all'equazione del nodo da cui dipende. `test/equations.test.js` verifica che ogni equazione mostrata coincida con il calcolo del modello.
 - **Assistente**: pannello in cui descrivere a parole cosa succede o cosa si fa.
   - Nella versione aperta su **claude.ai** risponde Claude: capisce frasi libere ("lo specializzando fa un reclutamento a 40 cmH₂O per 30 secondi"), applica le azioni al simulatore tramite gli strumenti di `window.NodeSim`, fa trascorrere il tempo e spiega gli effetti con i valori del modello. Usa l'utilizzo di Claude di chi lo apre, che la prima volta deve dare il permesso.
-  - Altrove (GitHub Pages, file locale) funziona come interprete di comandi in italiano, senza IA: `PEEP 15`, `FiO2 60%`, `reclutamento 40 per 30 s`, `bolo 500 mL`, `avanza 2 minuti`, `ARDS grave`, `pausa espiratoria`, `disattiva pressione pleurica`, `riattiva tutti`, `stato`, `aiuto`.
+  - Altrove (GitHub Pages, file locale) funziona come interprete di comandi in italiano, senza IA: `PEEP 15`, `FiO2 60%`, `reclutamento 40 per 30 s`, `bolo 500 mL`, `avanza 2 minuti`, `ARDS grave`, `pausa espiratoria`, `curva PV`, `disattiva pressione pleurica`, `riattiva tutti`, `stato`, `aiuto`.
   - **Versione classica**: la versione precedente resta disponibile in `classic/` (link dal menu Impostazioni) e nel ramo `backup-v1-2d`.
 
 ## Modello
@@ -61,7 +62,7 @@ Il modello (`js/physiology.js`) è a parametri concentrati e volutamente esplica
 | Blocco | Modello |
 | --- | --- |
 | Reclutamento | Pressioni di apertura e chiusura distribuite normalmente, con isteresi: le unità si aprono se Pplat > Popen e restano aperte se PEEPtot > Pclose (< Popen). Apertura in secondi, collasso in ~40 s. |
-| Meccanica | Curva P-V esponenziale (Salazar-Knowles) del polmone aerato + parete toracica lineare; VC, PC e PS a un compartimento RC; auto-PEEP da tempo espiratorio/costante di tempo; pressione media e potenza meccanica integrate sulla curva di pressione. |
+| Meccanica | Curva P-V del polmone aerato con compliance costante fino al flesso superiore (45% della capacità aerata), poi sempre più rigida; il flesso inferiore nasce dal reclutamento (Hickling 1998). Parete toracica lineare; VC, PC e PS a un compartimento RC; auto-PEEP da tempo espiratorio/costante di tempo; pressione media e potenza meccanica integrate sulla curva di pressione. |
 | Pleura | Ppl = Ppl₀ + V/Ccw − Pmus: la frazione di pressione trasmessa dipende dal rapporto tra elastanza della parete e del polmone. |
 | Circolo | Modello di Guyton: ritorno venoso (Pmsf − PVC)/RVR intersecato con una curva di Starling in funzione della pressione transmurale (PVC − Ppl − Ppericardica). PVR a U con il volume polmonare, vasocostrizione ipossica, acidosi; funzione VD dipendente dalla PAPm; scarico del VS nella disfunzione sistolica. Riflesso barocettivo e chemocettivo su FC, contrattilità, RVS e venocostrizione. |
 | Scambi | Shunt da polmone non aerato (con effetto della portata), compartimento a basso V/Q, contenuti di O₂ con curva di Severinghaus, SvO₂ dal bilancio VO₂/DO₂; spazio morto anatomico + alveolare; PaCO₂ dinamica con depositi di CO₂; pH con Henderson-Hasselbalch e lattato. |
@@ -76,13 +77,16 @@ Le costanti di calibrazione sono raccolte in `CAL` (`js/physiology.js`) e `test/
 | --- | --- | --- |
 | Hedenstierna (atelettasie da anestesia) | Nel sano in anestesia generale collassa circa il 5–10% del polmone; la PEEP lo riapre | Reclutabile 8%: aerazione 93% in ZEEP, 98% a PEEP 10 |
 | Gattinoni 2006 (NEJM) | Polmone reclutabile 13 ± 11%, non reclutabile circa 24% | ARDS moderata: 21% reclutabile, 18% non reclutabile |
-| Crotti 2001 (AJRCCM) | Pressioni di apertura circa 20 cmH₂O, di chiusura circa 5 cmH₂O, apertura molto dispersa | Apertura 23 (DS 8), chiusura 6 cmH₂O |
-| Gattinoni 1998 (AJRCCM) | Quota della parete toracica sull'elastanza: bassa nell'ARDS polmonare, alta con addome teso | ΔPpl/ΔPEEP: sano 0,44, ARDS 0,34, ARDS con IAP 20 mmHg 0,5 |
-| Chikhani 2016 (BJA) e serie cliniche | PEEP 0 → 20 nell'ARDS: DO₂ −25%, gittata −15/−36%, PaO₂ in aumento | DO₂ −20%, gittata −22%, PaO₂ +35 mmHg |
+| Crotti 2001 (AJRCCM) | Pressioni di apertura circa 20 cmH₂O, di chiusura circa 5 cmH₂O, apertura molto dispersa | Apertura 20 (DS 6), chiusura 6 cmH₂O |
+| Ranieri 1994, Roupie 1995 | Curva P-V statica nell'ARDS: flesso inferiore circa 10–20, superiore circa 25–30 cmH₂O, isteresi | ARDS moderata: LIP 17,5, UIP 29,5 cmH₂O, compliance lineare 48 mL/cmH₂O, isteresi 82 mL |
+| Curva di rilasciamento di Rahn | Nel sano la curva è lineare fino a circa 25–30 cmH₂O, senza flesso inferiore | Nessun LIP, UIP 30 cmH₂O, compliance lineare 57 mL/cmH₂O |
+| Titolazione decrementale (Suarez-Sipmann 2007) | Nell'ARDS reclutabile la compliance è massima a una PEEP intermedia | Crs 30 → 46 → 41 mL/cmH₂O a PEEP 24 → 12 → 4 |
+| Gattinoni 1998 (AJRCCM) | Quota della parete toracica sull'elastanza: bassa nell'ARDS polmonare, alta con addome teso | ΔPpl/ΔPEEP: sano 0,48, ARDS 0,38, ARDS con IAP 20 mmHg 0,49 |
+| Chikhani 2016 (BJA) e serie cliniche | PEEP 0 → 20 nell'ARDS: DO₂ −25%, gittata −15/−36%, PaO₂ in aumento | DO₂ −23%, gittata −26%, PaO₂ +40 mmHg |
 | Maas 2009 (Crit Care Med) | Pmsf nel paziente ventilato 18,8 ± 4,5 mmHg | Pmsf circa 16, PVC circa 7, gradiente circa 9 mmHg |
 | Benumof 1997 (Anesthesiology) | Apnea dopo preossigenazione fino a SpO₂ 90%: sano 8,7 min, obeso 127 kg 3,1 min, malato circa 5 min | 8,3 · 3,1 · 5,8 min; PaCO₂ +3,3 mmHg/min |
 | Iso-shunt di Nunn | PaO₂ con FiO₂ 1: circa 500 mmHg a shunt 10%, circa 100 a shunt 30% | 512 e 112 mmHg |
-| Serie cliniche BPCO | PEEP intrinseca 2–12 cmH₂O | 1,3 – 10,7 cmH₂O secondo FR e Ti |
+| Serie cliniche BPCO | PEEP intrinseca 2–12 cmH₂O | 1,5 – 11,2 cmH₂O secondo FR e Ti |
 | Michard | PPV sotto 13% in normovolemia, sopra in ipovolemia | 12% e 25% (volemia −20%) |
 
 Il modello resta esplicativo: riproduce direzioni e ordini di grandezza, non le risposte del singolo paziente (per quello servono modelli multi-compartimentali calibrati su dati individuali, come il Nottingham Physiology Simulator).

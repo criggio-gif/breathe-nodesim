@@ -7,7 +7,7 @@
 	const { PhysiologyModel, DEFAULT_PATIENT, DEFAULT_VENTILATOR } = window.BreathePhysiology;
 	const C = window.BreatheNodes;
 	const { Trends, sparkline, cssVar } = window.BreatheMonitor;
-		const { VentConsole, BreathPlayer } = window.BreatheConsole;
+		const { VentConsole, BreathPlayer, drawPV } = window.BreatheConsole;
 		const FREEZABLE = new Set(window.BreathePhysiology.FREEZABLE);
 	const $ = id => document.getElementById(id);
 	const clone = o => JSON.parse(JSON.stringify(o));
@@ -469,6 +469,71 @@
 		});
 	}
 
+	/*
+	 * Quasi-static P-V curve (low-flow P-V tool of ICU ventilators): apnea, airway pressure ramps from
+	 * `from` to `to` and back at `rate` cmH2O/s; the panel shows the two limbs and the inflection points.
+	 */
+	function pvCurve(opts) {
+		opts = opts || {};
+		const peep = model.ventilator.PositiveEndExpiratoryPressure;
+		const fromSel = opts.from !== undefined ? opts.from : $('pv-from').value;
+		const from = Math.round(Math.min(20, Math.max(0, fromSel === 'peep' ? peep : +fromSel || 0)));
+		const to = Math.round(Math.min(45, Math.max(from + 10, +(opts.to || $('pv-to').value) || 40)));
+		const rate = Math.min(5, Math.max(1, +(opts.rate || $('pv-rate').value) || 2));
+		const dur = 2 * (to - from) / rate;
+		runManeuver({
+			name: 'Curva P-V',
+			steps: [{ label: 'Rampa ' + from + ' → ' + to + ' → ' + from + ' cmH₂O', dur: dur + 0.3, start: () => model.startPVCurve({ from, to, rate }) }],
+			start: () => logEvent('Curva P-V quasi statica: ' + from + ' → ' + to + ' cmH₂O a ' + rate + ' cmH₂O/s (' + Math.round(dur) + ' s di apnea)',
+				'La pressione sale lentamente, quindi il flusso è minimo e la pressione delle vie aeree è quella alveolare: la curva è statica. Durante la manovra il paziente è in apnea e la pressione intratoracica alta riduce il ritorno venoso.'),
+			done: () => {
+				renderPV();
+				const r = model.pv && model.pv.result;
+				if (r) logEvent(pvSummary(r), 'Il flesso inferiore (LIP) è dove il reclutamento accelera: sotto, molte unità sono chiuse. Il flesso superiore (UIP) è dove il tessuto aerato si irrigidisce (sovradistensione): la Pplat dovrebbe restarne sotto. La distanza tra le due branche (isteresi) è il volume reclutato dalla manovra, che resta aperto finché la pressione non scende sotto la pressione di chiusura.', true);
+			}
+		});
+		openPV(true);
+		return { from, to, rate, durationSeconds: Math.round(dur) };
+	}
+
+	const fmtP = x => x === null || x === undefined ? 'non evidente' : x.toFixed(x % 1 ? 1 : 0) + ' cmH₂O';
+	function pvSummary(r) {
+		return 'Curva P-V: LIP ' + fmtP(r.lip) + ', UIP ' + fmtP(r.uip) + ', compliance lineare ' + r.cLin.toFixed(0) + ' mL/cmH₂O, isteresi ' + r.hyst.toFixed(0) + ' mL';
+	}
+
+	function openPV(on) {
+		$('pv-panel').hidden = !on;
+		$('pv-key').classList.toggle('on', !!on);
+		$('pv-key').setAttribute('aria-expanded', !!on);
+		if (on) renderPV();
+	}
+
+	function renderPV() {
+		const pv = model.pv;
+		const box = $('pv-res');
+		const st = $('pv-status');
+		if (pv && pv.running) {
+			const ov = model.override;
+			st.textContent = (ov && ov.phase === 'esp' ? 'desufflazione' : 'insufflazione') + (ov ? ' · ' + ov.pressure.toFixed(0) + ' cmH₂O' : '');
+		} else st.textContent = pv ? (pv.result ? 'completata' : 'interrotta') : '';
+		$('pv-start').textContent = pv && pv.running ? 'Interrompi' : 'Avvia';
+		const r = pv && pv.result;
+		if (!r) {
+			box.innerHTML = '<p class="hint">' + (pv && pv.running ? 'Manovra in corso: il paziente è in apnea.' : 'Apnea con rampa lenta di pressione, prima in salita e poi in discesa. Il ventilatore registra il volume a ogni pressione.') + '</p>';
+			return;
+		}
+		const row = (label, val, title) => '<div class="hr-row"' + (title ? ' title="' + title + '"' : '') + '><span>' + label + '</span>' + (val === null ? '<span class="na">—</span>' : '<b>' + val + '</b>') + '</div>';
+		const n = x => x === null ? null : (x % 1 ? x.toFixed(1) : String(x));
+		box.innerHTML = row('LIP cmH₂O', n(r.lip), 'Flesso inferiore: incrocio tra la tangente iniziale e quella del tratto più ripido della branca di insufflazione')
+			+ row('UIP cmH₂O', n(r.uip), 'Flesso superiore: incrocio tra la tangente del tratto più ripido e quella finale')
+			+ row('PMC desuffl.', n(r.pmc), 'Punto di massima curvatura della desufflazione: dove le unità iniziano a richiudersi')
+			+ row('C lineare', r.cLin.toFixed(0), 'mL/cmH₂O tra LIP e UIP')
+			+ row('Isteresi mL', r.hyst.toFixed(0), 'Massima distanza tra desufflazione e insufflazione alla stessa pressione' + (r.hystP !== null ? ' (a ' + r.hystP + ' cmH₂O)' : ''))
+			+ row('V a ' + r.to + ' mL', r.vMax.toFixed(0))
+			+ '<p class="hint">' + (r.lip === null ? 'Nessun flesso inferiore: poco polmone da reclutare. ' : 'Il flesso inferiore indica reclutamento: sotto, le unità sono chiuse. ')
+			+ (r.uip === null ? 'Nessun flesso superiore entro ' + r.to + ' cmH₂O.' : 'Sopra ' + n(r.uip) + ' cmH₂O il polmone aerato si sovradistende.') + '</p>';
+	}
+
 	function staircase() {
 		const saved = clone(model.ventilator);
 		const vt = saved.mode === 'VC' ? saved.TidalVolume : Math.round(6 * out.pbw / 10) * 10;
@@ -750,7 +815,8 @@
 		}
 	}
 
-	let lastFrame = null, acc = 0, recAcc = 0;
+	let lastFrame = null, acc = 0, recAcc = 0, lastPvT = 0;
+	let pvPanel = null, pvCanvas = null;
 	function frame(now) {
 		if (lastFrame === null) lastFrame = now;
 		const realDt = Math.min(0.1, (now - lastFrame) / 1000);
@@ -770,6 +836,10 @@
 		}
 		monitor.push(out, now);
 		monitor.draw(out);
+		if (!pvPanel.hidden) {
+			drawPV(pvCanvas, model.pv);
+			if (model.pv && model.pv.running && now - lastPvT > 250) { lastPvT = now; renderPV(); }
+		}
 		if (now - lastUiT > 250) { lastUiT = now; updateUI(); }
 		requestAnimationFrame(frame);
 	}
@@ -898,7 +968,7 @@
 			/* ------------------------------------------------------------ ventilator console */
 
 			function modeLabel(o) {
-				if (o.mode === 'SI') return 'RECLUTAMENTO · CPAP ' + o.pplat.toFixed(0) + ' cmH₂O';
+				if (o.mode === 'SI') return o.override && o.override.type === 'PV' ? 'CURVA P-V · ' + o.pplat.toFixed(0) + ' cmH₂O' : 'RECLUTAMENTO · CPAP ' + o.pplat.toFixed(0) + ' cmH₂O';
 				const v = model.ventilator;
 				if (o.mode === 'CPAP') return 'CPAP / ASB';
 				return (o.mode === 'VC' ? 'VC' : 'PC') + (v.AssistedMode === 0 ? '-AC' : '-CMV');
@@ -949,6 +1019,13 @@
 				};
 				bindHold('hold-insp', 'insp');
 				bindHold('hold-exp', 'exp');
+				$('pv-key').addEventListener('click', () => openPV($('pv-panel').hidden));
+				$('pv-close').addEventListener('click', () => openPV(false));
+				$('pv-start').addEventListener('click', () => {
+					if (model.pv && model.pv.running) stopManeuver();
+					else pvCurve();
+					renderPV();
+				});
 				$('freeze').addEventListener('click', () => {
 					const on = monitor.toggleFreeze();
 					$('freeze').setAttribute('aria-pressed', on);
@@ -1037,8 +1114,18 @@
 			actions,
 			maneuver: maneuver ? { name: maneuver.name, step: (maneuver.steps[maneuver.i] || {}).label, secondsLeft: Math.round(maneuver.total - maneuver.elapsed) } : null,
 			switchedOffNodes: Object.keys(model.frozen),
+			lastPVCurve: pvState(),
 			values: keyValues(out)
 		};
+	}
+
+	function pvState() {
+		const pv = model.pv;
+		if (!pv) return null;
+		if (pv.running) return { running: true, pressure: model.override ? rnd(model.override.pressure) : null };
+		const r = pv.result;
+		if (!r) return { aborted: true };
+		return { from: r.from, to: r.to, LIP: r.lip, UIP: r.uip, deflationPMC: r.pmc, linearCompliance: rnd(r.cLin), hysteresis_mL: rnd(r.hyst), volumeAtTop_mL: rnd(r.vMax), minutesAgo: rnd((model.t - pv.tStart) / 60) };
 	}
 
 	function effects(before, after, max) {
@@ -1178,6 +1265,11 @@
 			sustainedInflation(pressure, seconds);
 			return { pressure: +$('si-p').value, seconds: +$('si-t').value, note: 'Manovra avviata; usa advance per far trascorrere il tempo' };
 		},
+		pvCurve(from, to, rate) {
+			const r = pvCurve({ from: from === undefined ? 0 : from, to: to || 40, rate: rate || 2 });
+			return Object.assign(r, { note: 'Curva P-V avviata; usa advance per almeno ' + (r.durationSeconds + 1) + ' s, poi leggi lastPVCurve nello stato' });
+		},
+		lastPVCurve: pvState,
 		titration() {
 			staircase();
 			return { durationSeconds: maneuver ? Math.round(maneuver.total) : 0, note: 'Reclutamento a scalini + titolazione decrementale avviati' };
@@ -1216,6 +1308,7 @@
 			eqView.open(g.dataset.id, out);
 		});
 		monitor = new VentConsole($('monitor'), { abp: true, loop: $('loop') });
+		pvPanel = $('pv-panel'); pvCanvas = $('pv-canvas');
 				wireConsole();
 		trends = new Trends($('trends'), TREND_SERIES);
 		buildNumerics();

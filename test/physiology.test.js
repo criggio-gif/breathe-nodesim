@@ -212,6 +212,22 @@ check('compliance follows aeration: at the same PEEP, less aerated lung gives a 
 	assert(low < full * 0.85, 'Crs con aerazione 70% ' + low.toFixed(1) + ' vs 100% ' + full.toFixed(1));
 });
 
+check('P-V curve maneuver: pressure ramps up and down, then ventilation resumes and the inflection points are reported', () => {
+	const m = new PhysiologyModel({ conditions: ARDS });
+	m.startPVCurve({ from: 0, to: 40, rate: 4 });
+	let top = 0;
+	while (m.override) { m.step(0.25); top = Math.max(top, m.out.pplat); if (m.override) assert(m.out.pvVol !== null, 'pvVol'); }
+	assert(Math.abs(top - 40) < 1.1, 'max pressure ' + top);
+	assert(m.pv.result && m.pv.result.insp.length > 30 && m.pv.result.esp.length > 30, 'limbs');
+	assert(m.pv.result.uip !== null, 'UIP');
+	m.step(1);
+	assert(m.out.mode !== 'SI' && m.out.pvVol === null, 'ventilation resumed');
+	m.startPVCurve({});
+	m.step(1);
+	m.stopOverride();
+	assert(!m.pv.running && m.pv.result === null, 'aborted curve has no result');
+});
+
 let failed = 0;
 for (const c of checks) {
 	try { c.fn(); console.log('ok   ' + c.name); }

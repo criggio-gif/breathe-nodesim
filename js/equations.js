@@ -97,7 +97,8 @@
 			E(V('resta aperto', o.x.keep, 2), ['Φ', '(', F([V('PEEPtot', o.peepTot, 1, 'peeptot'), '−', V('Pclose', o.x.pClose, 1)], [K(o.x.cal.sdClose)]), ')'], 'Isteresi: "aperto" tende a min(si apre, resta aperto) in ~5 s e collassa verso "resta aperto" in ~40 s.')
 		],
 		crs: o => [
-			E(V('Crs', o.crs, 1, 'crs'), [F([V('VT', o.vt, 0, 'vt')], [V('Pplat', o.pplat, 1, 'pplat'), '−', V('PEEPtot', o.peepTot, 1, 'peeptot')])], 'Pplat deriva dalla curva P-V esponenziale del polmone aerato, che si allarga quando si recluta.')
+			E(V('Crs', o.crs, 1, 'crs'), [F([V('VT', o.vt, 0, 'vt')], [V('Pplat', o.pplat, 1, 'pplat'), '−', V('PEEPtot', o.peepTot, 1, 'peeptot')])], 'Pplat deriva dalla curva P-V del polmone aerato: compliance costante C₀ fino al flesso superiore, poi irrigidimento. La curva si allarga quando si recluta, per questo il flesso inferiore nasce dal reclutamento.'),
+			E(V('V flesso sup', o.x.vk, 0), [K(o.x.cal.kneeFrac), '·', V('Vmax aerato', o.x.vmax, 0)], 'Sotto questo volume (sopra la FRC) il tessuto aerato ha compliance costante C₀ = ' + o.x.c0.toFixed(0) + ' mL/cmH₂O; sopra, la compliance cala fino a zero a Vmax.')
 		],
 		pplat: o => [
 			E(V('Pplat', o.pplat, 1, 'pplat'), [V('PEEPtot', o.peepTot, 1, 'peeptot'), '+', F([V('VT', o.vt, 0, 'vt')], [V('Crs', o.crs, 0, 'crs')])]),
@@ -110,7 +111,7 @@
 			E(V('ΔP', o.dp, 1, 'dp'), [F([V('VT', o.vt, 0, 'vt')], [V('Crs', o.crs, 0, 'crs')])])
 		],
 		overdist: o => [
-			E(V('Sovradist', o.overdist / 100, 2, 'overdist'), ['clamp', '(', F([V('riempim', o.x.fillInsp, 2), '−', K(0.55)], [K(0.35)]), ')']),
+			E(V('Sovradist', o.overdist / 100, 2, 'overdist'), ['clamp', '(', F([V('riempim', o.x.fillInsp, 2), '−', K(o.x.cal.odStart)], [K(0.35)]), ')']),
 			E(V('riempim', o.x.fillInsp, 2), [F([V('V_PEEP', o.x.vpeep, 0), '+', V('VT', o.vt, 0, 'vt')], [V('Vmax aerato', o.x.vmax, 0)])])
 		],
 		mpaw: o => [
