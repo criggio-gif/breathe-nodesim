@@ -86,6 +86,10 @@ Le costanti di calibrazione sono raccolte in `CAL` (`js/physiology.js`) e `test/
 
 Il modello resta esplicativo: riproduce direzioni e ordini di grandezza, non le risposte del singolo paziente (per quello servono modelli multi-compartimentali calibrati su dati individuali, come il Nottingham Physiology Simulator).
 
+### Confronto con Pulse
+
+`tools/pulse-compare/` esegue la stessa scala di PEEP su Pulse (tramite `breathe.engine` di BREATHE) e su NodeSim e affianca i risultati: `tools/pulse-compare/run.sh /percorso/di/breathe.engine`. Istruzioni e risultati in [tools/pulse-compare/README.md](tools/pulse-compare/README.md).
+
 ## Struttura
 
 ```
@@ -101,6 +105,7 @@ breathe-nodesim/
 ├── js/equations.js    equazioni dal vivo di ogni nodo (lavagna)
 ├── js/assistant.js    pannello Assistente (Claude su claude.ai, comandi semplici altrove)
 ├── classic/           versione precedente (backup)
+├── tools/pulse-compare/  confronto con il motore Pulse di BREATHE
 ├── test/physiology.test.js
 ├── test/equations.test.js
 ├── test/console.test.js
